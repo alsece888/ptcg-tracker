@@ -280,6 +280,7 @@
         <div class="deck-list-manage-header">
           <h3>对手卡组管理</h3>
           <span style="font-size:12px;color:var(--text-muted);">管理对手卡组列表，对局记录下拉选项</span>
+          <button id="toggleDeckListBtn" class="btn btn-sm btn-ghost deck-list-toggle" title="展开/折叠卡组列表">展开 ▼</button>
         </div>
         <div class="deck-list-manage-add">
           <div class="deck-list-add-row">
@@ -303,8 +304,11 @@
             </div>
           </details>
         </div>
-        <div id="deckListSelectedIcons" style="font-size:13px;color:var(--text-dim);margin-bottom:8px;min-height:20px;"></div>
-        <div id="deckListEntries" class="deck-list-entries"></div>
+        <div id="deckListEntriesBody" class="deck-list-entries-body collapsed">
+          <div id="deckListSelectedIcons" style="font-size:13px;color:var(--text-dim);margin:8px 0;min-height:20px;"></div>
+          <div id="deckListEntries" class="deck-list-entries"></div>
+          <div class="deck-list-count" id="deckListCount"></div>
+        </div>
       </div>
     </section>
 

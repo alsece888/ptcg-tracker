@@ -1427,6 +1427,7 @@ function renderDeckListManage() {
   const container = $('deckListEntries');
   if (deckList.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:13px;">暂无对手卡组，在上方添加后，对局历史将可选对手卡组</div>';
+    $('deckListCount').textContent = '';
     return;
   }
   container.innerHTML = deckList.map(d => {
@@ -1463,6 +1464,7 @@ function renderDeckListManage() {
       </div>
     </div>`;
   }).join('');
+  $('deckListCount').textContent = '共 ' + deckList.length + ' 个卡组';
 }
 
 function renderMatchupAnalysis() {
@@ -1930,6 +1932,17 @@ $('exportHistoryBtn').addEventListener('click', () => {
   exportHistory();
 });
 $('addDeckListBtn').addEventListener('click', addDeckToList);
+$('toggleDeckListBtn').addEventListener('click', () => {
+  const body = $('deckListEntriesBody');
+  const btn = $('toggleDeckListBtn');
+  if (body.classList.contains('collapsed')) {
+    body.classList.remove('collapsed');
+    btn.textContent = '收起 ▲';
+  } else {
+    body.classList.add('collapsed');
+    btn.textContent = '展开 ▼';
+  }
+});
 $('batchAddDeckListBtn').addEventListener('click', batchAddDeckToList);
 $('newDeckListInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); addDeckToList(); }

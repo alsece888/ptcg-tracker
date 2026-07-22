@@ -645,8 +645,7 @@ function renderHistory() {
         var sel = dl.name===opp ? ' selected' : '';
         return '<option value="'+esc(dl.name)+'"'+sel+'>'+esc(dl.name)+'</option>';
       }).join('');
-      oppHtml = '<div class="hist-right-row"><select class="hist-opp-select" id="popSel_'+esc(x.id)+'"><option value="">--</option>'+opts+'</select>'+
-        '<button class="hist-btn-mini" onclick="savePopOpp(\''+esc(x.id)+'\')" title="保存">✓</button>'+
+      oppHtml = '<div class="hist-right-row"><select class="hist-opp-select" id="popSel_'+esc(x.id)+'" onchange="savePopOpp(\''+esc(x.id)+'\')"><option value="">--</option>'+opts+'</select>'+
         '<button class="hist-btn-mini cancel" onclick="cancelPopOpp()" title="取消">✕</button></div>';
     } else if (opp) {
       oppHtml = '<span class="hist-opp" onclick="editPopOpp(\''+esc(x.id)+'\')" title="点击修改">'+oppIcons+' vs '+esc(opp)+'</span>';
