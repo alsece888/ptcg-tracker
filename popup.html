@@ -675,14 +675,16 @@ function cancelPopOpp() {
   render();
 }
 
-function savePopOpp(id) {
-  var sel = document.getElementById('popSel_'+id);
-  if (!sel) { cancelPopOpp(); return; }
+function savePopOpp(id, val) {
+  if (val === undefined) {
+    var sel = document.querySelector('.hist-opp-select[data-id="'+id+'"]');
+    if (!sel) { cancelPopOpp(); return; }
+    val = sel.value;
+  }
   if (!data || !data.personal || !data.personal.matchHistory) return;
   data.personal.matchHistory.forEach(function(h) { delete h._editingOpp; });
   var entry = data.personal.matchHistory.find(function(h){ return h.id===id; });
   if (entry) {
-    var val = sel.value;
     if (val) { entry.opponentDeck = val; }
     else { delete entry.opponentDeck; }
   }
@@ -767,7 +769,7 @@ byId('historyList').addEventListener('change', function(e) {
   var selEl = e.target.closest('.hist-opp-select');
   if (selEl) {
     var id = selEl.getAttribute('data-id');
-    if (id) savePopOpp(id);
+    if (id) savePopOpp(id, selEl.value);
   }
 });
 
