@@ -1051,6 +1051,59 @@ body {
   flex-wrap: wrap;
 }
 
+/* 批量导入 */
+.batch-import-details {
+  width: 100%;
+  margin-top: 8px;
+}
+.batch-import-summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--primary);
+  font-weight: 600;
+  user-select: none;
+}
+.batch-import-summary:hover { color: var(--primary-hover); }
+.batch-import-body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.batch-import-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.batch-import-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font);
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+.batch-import-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* 全宽卡组图鉴区域 */
+.deck-list-manage-section {
+  margin-bottom: 24px;
+}
+.deck-list-add-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
 /* ============================================================
    对阵分析
    ============================================================ */

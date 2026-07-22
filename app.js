@@ -177,6 +177,102 @@ const DECK_ICONS = [
   { id: 'dusknoir', name: '黑夜魔灵', url: 'https://tcg.mik.moe/static/icon/dusknoir.png' },
   { id: 'calyrex-shadow-rider', name: '黑马蕾冠王', url: 'https://tcg.mik.moe/static/icon/calyrex-shadow-rider.png' },
   { id: 'tornadus', name: '龙卷云', url: 'https://tcg.mik.moe/static/icon/tornadus.png' },
+  { id: 'raging-bolt', name: '猛雷鼓', url: 'https://tcg.mik.moe/static/icon/raging-bolt.png' },
+  { id: 'grimmsnarl', name: '长毛巨魔', url: 'https://tcg.mik.moe/static/icon/grimmsnarl.png' },
+  { id: 'gholdengo', name: '赛富豪', url: 'https://tcg.mik.moe/static/icon/gholdengo.png' },
+  { id: 'joltik', name: '电电虫', url: 'https://tcg.mik.moe/static/icon/joltik.png' },
+  { id: 'archaludon', name: '铝钢桥龙', url: 'https://tcg.mik.moe/static/icon/archaludon.png' },
+  { id: 'ogerpon-wellspring', name: '碧草面具厄鬼椪', url: 'https://tcg.mik.moe/static/icon/ogerpon-wellspring.png' },
+  { id: 'roaring-moon', name: '轰鸣月', url: 'https://tcg.mik.moe/static/icon/roaring-moon.png' },
+  { id: 'toedscruel', name: '陆地水母', url: 'https://tcg.mik.moe/static/icon/toedscruel.png' },
+  { id: 'ogerpon', name: '厄鬼椪', url: 'https://tcg.mik.moe/static/icon/ogerpon.png' },
+  { id: 'spidops', name: '操陷蛛', url: 'https://tcg.mik.moe/static/icon/spidops.png' },
+  { id: 'iron-thorns', name: '铁荆棘', url: 'https://tcg.mik.moe/static/icon/iron-thorns.png' },
+  { id: 'crustle', name: '岩殿居蟹', url: 'https://tcg.mik.moe/static/icon/crustle.png' },
+  { id: 'ceruledge', name: '苍炎刃鬼', url: 'https://tcg.mik.moe/static/icon/ceruledge.png' },
+  { id: 'typhlosion', name: '火暴兽', url: 'https://tcg.mik.moe/static/icon/typhlosion.png' },
+  { id: 'snorlax', name: '卡比兽', url: 'https://tcg.mik.moe/static/icon/snorlax.png' },
+  { id: 'froslass', name: '雪妖女', url: 'https://tcg.mik.moe/static/icon/froslass.png' },
+  { id: 'munkidori', name: '愿增猿', url: 'https://tcg.mik.moe/static/icon/munkidori.png' },
+  { id: 'magcargo', name: '熔岩蜗牛', url: 'https://tcg.mik.moe/static/icon/magcargo.png' },
+  { id: 'ho-oh', name: '凤王', url: 'https://tcg.mik.moe/static/icon/ho-oh.png' },
+  { id: 'miraidon', name: '密勒顿', url: 'https://tcg.mik.moe/static/icon/miraidon.png' },
+  { id: 'conkeldurr', name: '修建老匠', url: 'https://tcg.mik.moe/static/icon/conkeldurr.png' },
+  { id: 'great-tusk', name: '雄伟牙', url: 'https://tcg.mik.moe/static/icon/great-tusk.png' },
+  { id: 'pidgeot', name: '大比鸟', url: 'https://tcg.mik.moe/static/icon/pidgeot.png' },
+  { id: 'terapagos', name: '太乐巴戈斯', url: 'https://tcg.mik.moe/static/icon/terapagos.png' },
+  { id: 'hydrapple', name: '蜜集大蛇', url: 'https://tcg.mik.moe/static/icon/hydrapple.png' },
+  { id: 'iron-hands', name: '铁臂膀', url: 'https://tcg.mik.moe/static/icon/iron-hands.png' },
+  { id: 'ogerpon-hearthflame', name: '火灶面具厄鬼椪', url: 'https://tcg.mik.moe/static/icon/ogerpon-hearthflame.png' },
+  { id: 'ogerpon-cornerstone', name: '础石面具厄鬼椪', url: 'https://tcg.mik.moe/static/icon/ogerpon-cornerstone.png' },
+  { id: 'ogerpon-teal', name: '碧草面具厄鬼椪', url: 'https://tcg.mik.moe/static/icon/ogerpon-teal.png' },
+  { id: 'fezandipiti', name: '吉雉鸡', url: 'https://tcg.mik.moe/static/icon/fezandipiti.png' },
+  { id: 'okidogi', name: '够赞狗', url: 'https://tcg.mik.moe/static/icon/okidogi.png' },
+  { id: 'munkidori-ex', name: '愿增猿ex', url: 'https://tcg.mik.moe/static/icon/munkidori-ex.png' },
+  { id: 'squawkabilly', name: '怒鹦哥', url: 'https://tcg.mik.moe/static/icon/squawkabilly.png' },
+  { id: 'tinkaton', name: '巨锻匠', url: 'https://tcg.mik.moe/static/icon/tinkaton.png' },
+  { id: 'luxray', name: '勒克猫', url: 'https://tcg.mik.moe/static/icon/luxray.png' },
+  { id: 'baxcalibur', name: '戟脊龙', url: 'https://tcg.mik.moe/static/icon/baxcalibur.png' },
+  { id: 'palafin', name: '海豚侠', url: 'https://tcg.mik.moe/static/icon/palafin.png' },
+  { id: 'annihilape', name: '弃世猴', url: 'https://tcg.mik.moe/static/icon/annihilape.png' },
+  { id: 'scizor', name: '巨钳螳螂', url: 'https://tcg.mik.moe/static/icon/scizor.png' },
+  { id: 'rotom', name: '洛托姆', url: 'https://tcg.mik.moe/static/icon/rotom.png' },
+  { id: 'ting-lu', name: '古鼎鹿', url: 'https://tcg.mik.moe/static/icon/ting-lu.png' },
+  { id: 'wo-chien', name: '古简蜗', url: 'https://tcg.mik.moe/static/icon/wo-chien.png' },
+  { id: 'chi-yu', name: '古玉鱼', url: 'https://tcg.mik.moe/static/icon/chi-yu.png' },
+  { id: 'chien-pao-ex', name: '古剑豹ex', url: 'https://tcg.mik.moe/static/icon/chien-pao-ex.png' },
+  { id: 'espathra', name: '超能艳鸵', url: 'https://tcg.mik.moe/static/icon/espathra.png' },
+  { id: 'banette', name: '诅咒娃娃', url: 'https://tcg.mik.moe/static/icon/banette.png' },
+  { id: 'dipplin', name: '裹蜜虫', url: 'https://tcg.mik.moe/static/icon/dipplin.png' },
+  { id: 'iron-crown', name: '铁头壳', url: 'https://tcg.mik.moe/static/icon/iron-crown.png' },
+  { id: 'iron-boulder', name: '铁磐岩', url: 'https://tcg.mik.moe/static/icon/iron-boulder.png' },
+  { id: 'iron-leaves', name: '铁斑叶', url: 'https://tcg.mik.moe/static/icon/iron-leaves.png' },
+  { id: 'walking-wake', name: '波荡水', url: 'https://tcg.mik.moe/static/icon/walking-wake.png' },
+  { id: 'gouging-fire', name: '破空焰', url: 'https://tcg.mik.moe/static/icon/gouging-fire.png' },
+  { id: 'kingambit', name: '仆刀将军', url: 'https://tcg.mik.moe/static/icon/kingambit.png' },
+  { id: 'glimmora', name: '晶光花', url: 'https://tcg.mik.moe/static/icon/glimmora.png' },
+  { id: 'dondozo', name: '吃吼霸', url: 'https://tcg.mik.moe/static/icon/dondozo.png' },
+  { id: 'tatsugiri', name: '米立龙', url: 'https://tcg.mik.moe/static/icon/tatsugiri.png' },
+  { id: 'meowscarada', name: '魔幻假面喵', url: 'https://tcg.mik.moe/static/icon/meowscarada.png' },
+  { id: 'skeledirge', name: '骨纹巨声鳄', url: 'https://tcg.mik.moe/static/icon/skeledirge.png' },
+  { id: 'quaquaval', name: '狂欢浪舞鸭', url: 'https://tcg.mik.moe/static/icon/quaquaval.png' },
+  { id: 'dudunsparce', name: '土龙节节', url: 'https://tcg.mik.moe/static/icon/dudunsparce.png' },
+  { id: 'arboliva', name: '奥利瓦', url: 'https://tcg.mik.moe/static/icon/arboliva.png' },
+  { id: 'garganacl', name: '盐石巨灵', url: 'https://tcg.mik.moe/static/icon/garganacl.png' },
+  { id: 'bellibolt', name: '电肚蛙', url: 'https://tcg.mik.moe/static/icon/bellibolt.png' },
+  { id: 'wugtrio', name: '三海地鼠', url: 'https://tcg.mik.moe/static/icon/wugtrio.png' },
+  { id: 'bombirdier', name: '下石鸟', url: 'https://tcg.mik.moe/static/icon/bombirdier.png' },
+  { id: 'orthworm', name: '拖拖蚓', url: 'https://tcg.mik.moe/static/icon/orthworm.png' },
+  { id: 'revavroom', name: '普隆隆姆', url: 'https://tcg.mik.moe/static/icon/revavroom.png' },
+  { id: 'dachsbun', name: '麻花犬', url: 'https://tcg.mik.moe/static/icon/dachsbun.png' },
+  { id: 'armarouge-ex', name: '红莲铠骑ex', url: 'https://tcg.mik.moe/static/icon/armarouge-ex.png' },
+  { id: 'ceruledge-ex', name: '苍炎刃鬼ex', url: 'https://tcg.mik.moe/static/icon/ceruledge-ex.png' },
+  { id: 'houndoom', name: '黑鲁加', url: 'https://tcg.mik.moe/static/icon/houndoom.png' },
+  { id: 'tyranitar-ex', name: '班基拉斯ex', url: 'https://tcg.mik.moe/static/icon/tyranitar-ex.png' },
+  { id: 'pawmot', name: '巴布土拨', url: 'https://tcg.mik.moe/static/icon/pawmot.png' },
+  { id: 'kilowattrel', name: '大电海燕', url: 'https://tcg.mik.moe/static/icon/kilowattrel.png' },
+  { id: 'toedscool', name: '原野水母', url: 'https://tcg.mik.moe/static/icon/toedscool.png' },
+  { id: 'brute-bonnet', name: '猛恶菇', url: 'https://tcg.mik.moe/static/icon/brute-bonnet.png' },
+  { id: 'flutter-mane', name: '振翼发', url: 'https://tcg.mik.moe/static/icon/flutter-mane.png' },
+  { id: 'sandy-shocks', name: '沙铁皮', url: 'https://tcg.mik.moe/static/icon/sandy-shocks.png' },
+  { id: 'slither-wing', name: '爬地翅', url: 'https://tcg.mik.moe/static/icon/slither-wing.png' },
+  { id: 'scream-tail', name: '吼叫尾', url: 'https://tcg.mik.moe/static/icon/scream-tail.png' },
+  { id: 'iron-moth', name: '铁毒蛾', url: 'https://tcg.mik.moe/static/icon/iron-moth.png' },
+  { id: 'iron-jugulis', name: '铁脖颈', url: 'https://tcg.mik.moe/static/icon/iron-jugulis.png' },
+  { id: 'iron-treads', name: '铁辙迹', url: 'https://tcg.mik.moe/static/icon/iron-treads.png' },
+  { id: 'iron-bundle', name: '铁包袱', url: 'https://tcg.mik.moe/static/icon/iron-bundle.png' },
+  { id: 'milotic', name: '美纳斯', url: 'https://tcg.mik.moe/static/icon/milotic.png' },
+  { id: 'feraligatr', name: '大力鳄', url: 'https://tcg.mik.moe/static/icon/feraligatr.png' },
+  { id: 'meganium', name: '大竺葵', url: 'https://tcg.mik.moe/static/icon/meganium.png' },
+  { id: 'emboar', name: '炎武王', url: 'https://tcg.mik.moe/static/icon/emboar.png' },
+  { id: 'samurott', name: '大剑鬼', url: 'https://tcg.mik.moe/static/icon/samurott.png' },
+  { id: 'delphox', name: '妖火红狐', url: 'https://tcg.mik.moe/static/icon/delphox.png' },
+  { id: 'chesnaught', name: '布里卡隆', url: 'https://tcg.mik.moe/static/icon/chesnaught.png' },
+  { id: 'greninja-ex', name: '甲贺忍蛙ex', url: 'https://tcg.mik.moe/static/icon/greninja-ex.png' },
+  { id: 'incineroar', name: '炽焰咆哮虎', url: 'https://tcg.mik.moe/static/icon/incineroar.png' },
+  { id: 'primarina', name: '西狮海壬', url: 'https://tcg.mik.moe/static/icon/primarina.png' },
+  { id: 'rillaboom', name: '轰擂金刚猩', url: 'https://tcg.mik.moe/static/icon/rillaboom.png' },
+  { id: 'inteleon-ex', name: '千面避役ex', url: 'https://tcg.mik.moe/static/icon/inteleon-ex.png' },
 ];
 
 // 图标辅助函数
@@ -1133,6 +1229,40 @@ function addDeckToList() {
   showToast('卡组 "' + name + '" 已添加到图鉴', 'success');
 }
 
+function batchAddDeckToList() {
+  const textarea = $('batchDeckListInput');
+  const raw = textarea.value.trim();
+  if (!raw) { showToast('请输入卡组名称', 'error'); return; }
+  if (!state.personal.deckList) state.personal.deckList = [];
+
+  const lines = raw.split(/[\n,，]+/).map(s => s.trim()).filter(Boolean);
+  let added = 0, skipped = 0;
+
+  lines.forEach(name => {
+    if (state.personal.deckList.some(d => d.name === name)) {
+      skipped++;
+      return;
+    }
+    const icons = suggestDeckIconsByName(name);
+    state.personal.deckList.push({ id: uuid(), name, icons });
+    added++;
+  });
+
+  saveData();
+  textarea.value = '';
+  renderDeckListManage();
+  renderHistory();
+
+  const msg = $('batchImportResult');
+  if (msg) {
+    if (added > 0) msg.textContent = '成功导入 ' + added + ' 个卡组';
+    if (skipped > 0) msg.textContent += '，跳过 ' + skipped + ' 个（已存在）';
+    if (added === 0) msg.textContent = '所有卡组都已存在，无需导入';
+    setTimeout(() => { msg.textContent = ''; }, 3000);
+  }
+  showToast('成功导入 ' + added + ' 个卡组' + (skipped > 0 ? '，' + skipped + ' 个已跳过' : ''), 'success');
+}
+
 function removeDeckFromList(id) {
   const entry = (state.personal.deckList || []).find(d => d.id === id);
   if (!entry) return;
@@ -1741,6 +1871,7 @@ $('exportHistoryBtn').addEventListener('click', () => {
   exportHistory();
 });
 $('addDeckListBtn').addEventListener('click', addDeckToList);
+$('batchAddDeckListBtn').addEventListener('click', batchAddDeckToList);
 $('newDeckListInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); addDeckToList(); }
 });

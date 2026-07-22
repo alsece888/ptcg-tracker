@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PTCG 玩家追踪器</title>
   <meta name="description" content="宝可梦卡牌小天冠山排位赛玩家数据追踪工具">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
 <body>
@@ -165,26 +165,6 @@
           <div id="deckList" class="deck-list"></div>
         </div>
 
-        <!-- 卡组列表管理（对手卡组图鉴） -->
-        <div id="deckListManagePanel" class="deck-list-manage-panel">
-          <div class="deck-list-manage-header">
-            <h3>📚 卡组图鉴</h3>
-            <span style="font-size:12px;color:var(--text-muted);">管理对手卡组列表，对局记录下拉选项</span>
-          </div>
-          <div class="deck-list-manage-add">
-            <input type="text" id="newDeckListInput" class="deck-list-name-input" placeholder="输入对手卡组名称..." maxlength="30">
-            <div class="pokemon-icon-picker">
-              <span class="pokemon-icon-label">图标(0-2):</span>
-              <div class="deck-icon-search">
-                <input type="text" id="deckIconSearch" class="deck-icon-search-input" placeholder="搜索宝可梦图标..." oninput="filterDeckIcons(this.value)" onclick="event.stopPropagation()">
-              </div>
-              <div class="pokemon-icon-grid" id="deckListIconPicker"></div>
-            </div>
-            <button id="addDeckListBtn" class="btn btn-add">＋ 添加</button>
-          </div>
-          <div id="deckListSelectedIcons" style="font-size:13px;color:var(--text-dim);margin-bottom:8px;min-height:20px;"></div>
-          <div id="deckListEntries" class="deck-list-entries"></div>
-        </div>
       </div>
 
       <!-- 第三步：对局历史 -->
@@ -293,6 +273,41 @@
       </div>
     </section>
 
+    <!-- 卡组图鉴（页面底部） -->
+    <h2 class="module-title">📚 卡组图鉴</h2>
+    <section class="deck-list-manage-section" id="deckListManageSection">
+      <div id="deckListManagePanel" class="deck-list-manage-panel">
+        <div class="deck-list-manage-header">
+          <h3>对手卡组管理</h3>
+          <span style="font-size:12px;color:var(--text-muted);">管理对手卡组列表，对局记录下拉选项</span>
+        </div>
+        <div class="deck-list-manage-add">
+          <div class="deck-list-add-row">
+            <input type="text" id="newDeckListInput" class="deck-list-name-input" placeholder="输入对手卡组名称..." maxlength="30">
+            <div class="pokemon-icon-picker">
+              <span class="pokemon-icon-label">图标(0-2):</span>
+              <div class="deck-icon-search">
+                <input type="text" id="deckIconSearch" class="deck-icon-search-input" placeholder="搜索宝可梦图标..." oninput="filterDeckIcons(this.value)" onclick="event.stopPropagation()">
+              </div>
+              <div class="pokemon-icon-grid" id="deckListIconPicker"></div>
+            </div>
+            <button id="addDeckListBtn" class="btn btn-add">＋ 添加</button>
+          </div>
+          <details class="batch-import-details">
+            <summary class="batch-import-summary">📋 批量导入卡组名称</summary>
+            <div class="batch-import-body">
+              <p class="batch-import-hint">每行输入一个卡组名称，系统会自动匹配宝可梦图标</p>
+              <textarea id="batchDeckListInput" class="batch-import-textarea" placeholder="例：&#10;猛雷鼓 ex&#10;沙奈朵 ex&#10;多龙巴鲁托 ex&#10;喷火龙 ex&#10;轰鸣月 ex" rows="5"></textarea>
+              <button id="batchAddDeckListBtn" class="btn btn-primary">批量导入</button>
+              <span id="batchImportResult" class="add-result"></span>
+            </div>
+          </details>
+        </div>
+        <div id="deckListSelectedIcons" style="font-size:13px;color:var(--text-dim);margin-bottom:8px;min-height:20px;"></div>
+        <div id="deckListEntries" class="deck-list-entries"></div>
+      </div>
+    </section>
+
     <!-- 底部 -->
     <footer class="footer">
       <p class="footer-text">数据来源：<a href="https://ptcg.mivm.cn/rank.html" target="_blank" rel="noopener">小天冠山排位赛</a> · 排行榜每十分钟更新一次 · 数据保存在本地浏览器</p>
@@ -330,6 +345,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
