@@ -369,21 +369,63 @@ function importData(file) {
   reader.onload = (e) => {
     try {
       const data = JSON.parse(e.target.result);
-      if (!Array.isArray(data.watchlist)) throw new Error('文件格式不正确');
-      state.watchlist = data.watchlist || [];
-      state.lastUpdate = data.lastUpdate || null;
-      state.players = data.players || {};
-      state.notes = data.notes || {};
-      state.personal = data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] };
-      saveData();
-      render();
-      renderPersonalSection();
-      showToast('数据导入成功', 'success');
+      applyImportedData(data);
     } catch (err) {
       showToast('导入失败: ' + err.message, 'error');
     }
   };
   reader.readAsText(file);
+}
+
+function applyImportedData(data) {
+  if (!Array.isArray(data.watchlist)) throw new Error('文件格式不正确');
+  state.watchlist = data.watchlist || [];
+  state.lastUpdate = data.lastUpdate || null;
+  state.players = data.players || {};
+  state.notes = data.notes || {};
+  state.personal = data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] };
+  if (!state.personal.deckList) state.personal.deckList = [];
+  saveData();
+  render();
+  renderPersonalSection();
+  showToast('数据导入成功', 'success');
+}
+
+// 粘贴导入
+function openPasteModal() {
+  $('pasteModal').style.display = 'flex';
+  $('pasteInput').value = '';
+  $('pasteMsg').textContent = '';
+  $('pasteMsg').className = 'paste-msg';
+  setTimeout(() => $('pasteInput').focus(), 100);
+}
+
+function closePasteModal() {
+  $('pasteModal').style.display = 'none';
+}
+
+function confirmPasteImport() {
+  const raw = $('pasteInput').value.trim();
+  if (!raw) {
+    $('pasteMsg').textContent = '请先粘贴数据';
+    $('pasteMsg').className = 'paste-msg error';
+    return;
+  }
+  try {
+    let data;
+    // 支持粘贴原始 localStorage JSON 字符串或已格式化的 JSON
+    if (raw.startsWith('{')) {
+      data = JSON.parse(raw);
+    } else {
+      // 可能是双重编码的字符串
+      data = JSON.parse(JSON.parse(raw));
+    }
+    applyImportedData(data);
+    closePasteModal();
+  } catch (err) {
+    $('pasteMsg').textContent = '数据格式错误，请确认完整粘贴: ' + err.message;
+    $('pasteMsg').className = 'paste-msg error';
+  }
 }
 
 function clearAllData() {
@@ -1479,7 +1521,7 @@ $('exportBtn').addEventListener('click', () => {
 });
 $('importBtn').addEventListener('click', () => {
   menuDropdown.style.display = 'none';
-  $('importFile').click();
+  openPasteModal();
 });
 $('clearBtn').addEventListener('click', () => {
   menuDropdown.style.display = 'none';
@@ -1488,14 +1530,25 @@ $('clearBtn').addEventListener('click', () => {
 
 // 头部直接可见的导出/导入按钮
 $('exportBtn2').addEventListener('click', exportData);
-$('importBtn2').addEventListener('click', () => $('importFile').click());
+$('importBtn2').addEventListener('click', openPasteModal);
 
 // 个人战绩模块导出/导入按钮
 $('exportAllBtn').addEventListener('click', exportData);
-$('importAllBtn').addEventListener('click', () => $('importFile').click());
+$('importAllBtn').addEventListener('click', openPasteModal);
 $('importFile').addEventListener('change', (e) => {
   if (e.target.files[0]) importData(e.target.files[0]);
   e.target.value = '';
+});
+
+// 粘贴导入弹窗事件
+$('pasteModalClose').addEventListener('click', closePasteModal);
+$('pasteCancelBtn').addEventListener('click', closePasteModal);
+$('pasteConfirmBtn').addEventListener('click', confirmPasteImport);
+$('pasteModal').addEventListener('click', (e) => {
+  if (e.target === $('pasteModal')) closePasteModal();
+});
+$('pasteInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.ctrlKey) confirmPasteImport();
 });
 
 // ============================================================

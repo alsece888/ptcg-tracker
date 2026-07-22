@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PTCG 玩家追踪器</title>
   <meta name="description" content="宝可梦卡牌小天冠山排位赛玩家数据追踪工具">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
 <body>
@@ -308,6 +308,24 @@
 
   <!-- 导入文件 -->
   <input type="file" id="importFile" accept=".json" style="display:none;">
+
+  <!-- 粘贴导入弹窗 -->
+  <div id="pasteModal" class="paste-modal" style="display:none;">
+    <div class="paste-modal-content">
+      <div class="paste-modal-header">
+        <h3>📋 粘贴导入数据</h3>
+        <button id="pasteModalClose" class="btn btn-ghost">✕</button>
+      </div>
+      <p class="paste-modal-hint">在旧站点按 <b>F12</b> → <b>Console</b>，输入下面这行代码并回车，然后粘贴到下方：</p>
+      <code class="paste-modal-code">copy(localStorage.getItem('ptcg-tracker-data'))</code>
+      <textarea id="pasteInput" class="paste-input" placeholder="在这里粘贴数据..." rows="6"></textarea>
+      <div class="paste-modal-actions">
+        <button id="pasteConfirmBtn" class="btn btn-primary">确认导入</button>
+        <button id="pasteCancelBtn" class="btn btn-ghost">取消</button>
+      </div>
+      <div id="pasteMsg" class="paste-msg"></div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
