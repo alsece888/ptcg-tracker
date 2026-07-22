@@ -560,12 +560,16 @@ var data = null;
 function loadData() {
   try { var r = localStorage.getItem(STORAGE_KEY); data = r ? JSON.parse(r) : null; } catch (e) { data = null; }
 }
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function pad(n) { return n < 10 ? '0' + n : '' + n; }
 function byId(id) { return document.getElementById(id); }
 
 function render() {
-  loadData();
+  // 如果正在编辑对手，不要重新加载 localStorage，避免丢失临时编辑状态
+  var editing = data && data.personal && data.personal.matchHistory && data.personal.matchHistory.some(function(h){ return h._editingOpp; });
+  if (!editing) {
+    loadData();
+  }
   var p = data && data.personal;
   var hasPlayer = p && p.playerName;
   var decks = (p && p.decks) || {};
@@ -645,12 +649,12 @@ function renderHistory() {
         var sel = dl.name===opp ? ' selected' : '';
         return '<option value="'+esc(dl.name)+'"'+sel+'>'+esc(dl.name)+'</option>';
       }).join('');
-      oppHtml = '<div class="hist-right-row"><select class="hist-opp-select" id="popSel_'+esc(x.id)+'" onchange="savePopOpp(\''+esc(x.id)+'\')"><option value="">--</option>'+opts+'</select>'+
-        '<button class="hist-btn-mini cancel" onclick="cancelPopOpp()" title="取消">✕</button></div>';
+      oppHtml = '<div class="hist-right-row"><select class="hist-opp-select" data-id="'+esc(x.id)+'"><option value="">--</option>'+opts+'</select>'+
+        '<button class="hist-btn-mini cancel" data-cancel="'+esc(x.id)+'" title="取消">✕</button></div>';
     } else if (opp) {
-      oppHtml = '<span class="hist-opp" onclick="editPopOpp(\''+esc(x.id)+'\')" title="点击修改">'+oppIcons+' vs '+esc(opp)+'</span>';
+      oppHtml = '<span class="hist-opp" data-id="'+esc(x.id)+'" title="点击修改">'+oppIcons+' vs '+esc(opp)+'</span>';
     } else {
-      oppHtml = '<span class="hist-opp-placeholder" onclick="editPopOpp(\''+esc(x.id)+'\')">+ 对手</span>';
+      oppHtml = '<span class="hist-opp-placeholder" data-id="'+esc(x.id)+'">+ 对手</span>';
     }
 
     return '<div class="hist-item"><div class="hist-left"><span class="hist-deck-dot '+dc+'"></span><span class="hist-deck-name" title="'+esc(x.deckName||'')+'">'+esc(x.deckName||'')+'</span><span class="hist-delta">'+delta+'</span>'+oppHtml+'</div><span class="hist-time">'+ts+'</span></div>';
@@ -743,6 +747,30 @@ var TK = 'ptcg-theme';
 function getTheme() { return localStorage.getItem(TK) || 'light'; }
 function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); }
 window.addEventListener('storage', function(e) { if (e.key===TK) applyTheme(e.newValue||'light'); });
+// 对局历史事件委托：点击对手进入编辑，选择下拉框自动保存，点击取消退出
+byId('historyList').addEventListener('click', function(e) {
+  var target = e.target;
+  var oppEl = target.closest('.hist-opp, .hist-opp-placeholder');
+  if (oppEl) {
+    var id = oppEl.getAttribute('data-id');
+    if (id) { e.stopPropagation(); editPopOpp(id); }
+    return;
+  }
+  var cancelEl = target.closest('.hist-btn-mini[data-cancel]');
+  if (cancelEl) {
+    e.stopPropagation();
+    cancelPopOpp();
+    return;
+  }
+});
+byId('historyList').addEventListener('change', function(e) {
+  var selEl = e.target.closest('.hist-opp-select');
+  if (selEl) {
+    var id = selEl.getAttribute('data-id');
+    if (id) savePopOpp(id);
+  }
+});
+
 applyTheme(getTheme());
 loadData();
 render();
