@@ -638,7 +638,7 @@ function renderHistory() {
     var ts = (d.getMonth()+1)+'/'+d.getDate()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
     var dw = x.deltaWins || 0, dl = x.deltaLosses || 0, has = dw>0||dl>0;
     var dc = has ? (dw>dl?'win':'lose') : 'neutral';
-    var delta = has ? '<span class="dw">+'+dw+'</span><span class="hist-sep">/</span><span class="dl">-'+dl+'</span>' : '<span style="color:var(--text-3)">切换</span>';
+    var delta = has ? (dw>dl ? '<span class="dw">胜</span>' : '<span class="dl">负</span>') : '<span style="color:var(--text-3)">切换</span>';
     var opp = x.opponentDeck || '';
     var deckEntry = opp ? deckList.find(function(dl){ return dl.name===opp; }) : null;
     var oppIcons = deckEntry && deckEntry.icons ? renderPopDeckIcons(deckEntry.icons) : '';
