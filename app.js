@@ -275,6 +275,56 @@ const DECK_ICONS = [
   { id: 'inteleon-ex', name: '千面避役ex', url: 'https://tcg.mik.moe/static/icon/inteleon-ex.png' },
 ];
 
+// 内置默认卡组图鉴 —— 新用户首次打开自动加载
+const DEFAULT_DECK_LIST = [
+  { name: '沙奈朵', icons: ['gardevoir'] },
+  { name: '多龙', icons: ['dragapult'] },
+  { name: '多龙（自爆轴）', icons: ['dragapult', 'dusknoir'] },
+  { name: '多龙（恶喷轴）', icons: ['dragapult', 'charizard'] },
+  { name: '多龙（火鸡轴）', icons: ['dragapult', 'blaziken'] },
+  { name: '猛雷鼓', icons: ['raging-bolt'] },
+  { name: '猛雷鼓（白轴）', icons: ['raging-bolt'] },
+  { name: '赛富豪', icons: ['gholdengo'] },
+  { name: '赛富豪（多龙轴）', icons: ['gholdengo'] },
+  { name: '玛长', icons: ['grimmsnarl'] },
+  { name: '电电虫box', icons: ['joltik'] },
+  { name: '伊布box', icons: [] },
+  { name: '恶喷', icons: ['charizard'] },
+  { name: '恶喷（白轴）', icons: ['charizard', 'noctowl'] },
+  { name: '钛晶box', icons: ['terapagos'] },
+  { name: 'N索', icons: ['zoroark'] },
+  { name: '桥龙', icons: ['archaludon'] },
+  { name: '桥龙（毒轴）', icons: ['archaludon'] },
+  { name: '陆地水母', icons: ['toedscruel'] },
+  { name: '火箭队box', icons: ['mewtwo'] },
+  { name: '轰明月ex（毒）', icons: ['roaring-moon'] },
+  { name: '轰鸣月', icons: ['roaring-moon'] },
+  { name: '赫普box', icons: ['zacian-crowned'] },
+  { name: '凤王送火box', icons: ['ho-oh'] },
+  { name: '火暴兽', icons: ['typhlosion'] },
+  { name: '苍炎刃鬼ex', icons: ['ceruledge'] },
+  { name: '呆呆王', icons: ['slowking-galar'] },
+  { name: '铁荆棘ex', icons: ['iron-thorns'] },
+  { name: '岩殿居蟹', icons: ['crustle'] },
+  { name: '幸福蛋愿增猿', icons: ['blissey', 'munkidori'] },
+  { name: '祭典乐舞', icons: [] },
+  { name: '三首恶龙', icons: [] },
+  { name: '雪妖女愿增援', icons: ['froslass'] },
+  { name: '未来box', icons: ['miraidon'] },
+  { name: '雄伟牙', icons: ['great-tusk'] },
+  { name: '大力鳄', icons: ['feraligatr'] },
+  { name: '超能艳鸵', icons: ['espathra'] },
+  { name: '钛晶龟', icons: ['terapagos'] },
+  { name: '凤王熔岩蜗牛', icons: ['ho-oh', 'magcargo'] },
+  { name: '甲贺忍蛙ex', icons: ['greninja'] },
+  { name: '古剑豹', icons: ['chien-pao'] },
+  { name: '魔幻假面喵ex', icons: ['meowscarada'] },
+  { name: '厄诡椪box', icons: [] },
+  { name: '修建老匠', icons: ['conkeldurr'] },
+  { name: '雕控', icons: ['pidgeot'] },
+  { name: '古鼎鹿ex', icons: ['ting-lu'] },
+];
+
 // 图标辅助函数
 function findDeckIcon(id) {
   return DECK_ICONS.find(i => i.id === id);
@@ -410,6 +460,15 @@ function loadData() {
         }
         if (migrated) saveData();
       }
+    }
+    // 注入默认卡组图鉴：新用户或未设置卡组的用户首次加载时自动填充
+    if (!state.personal.deckList || state.personal.deckList.length === 0) {
+      state.personal.deckList = DEFAULT_DECK_LIST.map(d => ({
+        id: uuid(),
+        name: d.name,
+        icons: [...d.icons],
+      }));
+      saveData();
     }
   } catch (e) {
     console.error('加载数据失败:', e);
