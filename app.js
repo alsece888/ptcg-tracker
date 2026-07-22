@@ -198,6 +198,39 @@ function renderDeckIcons(ids, size = 22) {
   return `<span class="deck-icons">${ids.map(id => renderDeckIcon(id, size)).join('')}</span>`;
 }
 
+// 根据卡组名称模糊匹配推荐宝可梦图标（最多 2 个）
+function suggestDeckIconsByName(name) {
+  const raw = name.toLowerCase().trim();
+  if (!raw) return [];
+
+  // 去除常见后缀，避免 "耿鬼VMAX" 无法匹配 "耿鬼"
+  const suffixes = ['卡组', '牌组', '套牌', 'vmax', 'v-star', 'vstar', 'v-union', 'v-uno', 'v', 'ex', 'gx', 'mega'];
+  let cleaned = raw;
+  for (const suffix of suffixes) {
+    if (cleaned.endsWith(suffix)) {
+      cleaned = cleaned.slice(0, -suffix.length).trim();
+    }
+  }
+  if (!cleaned) cleaned = raw;
+
+  // 1. 名称完全包含搜索词（如 "沙奈朵"）
+  let matches = DECK_ICONS.filter(i => i.name.toLowerCase().includes(cleaned));
+
+  // 2. 搜索词包含完整图标名（如 "铝钢龙VMAX" 包含 "铝钢龙"）
+  if (matches.length < 2) {
+    const extra = DECK_ICONS.filter(i =>
+      !matches.includes(i) &&
+      cleaned.includes(i.name.toLowerCase())
+    );
+    matches = matches.concat(extra);
+  }
+
+  // 3. 按名称长度排序（越短越具体，优先）
+  matches.sort((a, b) => a.name.length - b.name.length);
+
+  return matches.slice(0, 2).map(i => i.id);
+}
+
 // --- 工具函数 ---
 function uuid() {
   return 'xxxx-xxxx-xxxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16));
@@ -212,6 +245,7 @@ let currentSort = 'exp';
 let editingNote = null;
 let editingHistoryId = null;
 let selectedDeckListIcons = [];
+let lastSuggestedDeckIcons = [];
 let editingDeckListId = null;
 let deckIconSearchTerm = '';
 let searchTerm = '';
@@ -1030,19 +1064,14 @@ function startRenameDeck(id) {
   }
 }
 
-function renderDeckListIcons(selectedIcons) {
+function renderDeckListIconGrid(selectedIcons) {
   const icons = selectedIcons || [];
   const term = (deckIconSearchTerm || '').toLowerCase().trim();
   const filtered = term
     ? DECK_ICONS.filter(i => i.name.toLowerCase().includes(term) || i.id.toLowerCase().includes(term))
     : DECK_ICONS;
 
-  let html = `<div class="deck-icon-search">
-    <input type="text" id="deckIconSearch" class="deck-icon-search-input" placeholder="搜索宝可梦图标..." value="${esc(deckIconSearchTerm || '')}"
-      oninput="filterDeckIcons(this.value)" onclick="event.stopPropagation()">
-  </div>`;
-
-  html += `<div class="pokemon-icon-grid">${filtered.map(i => {
+  return `<div class="pokemon-icon-grid">${filtered.map(i => {
     const isSel = icons.includes(i.id);
     const disabled = !isSel && icons.length >= 2;
     return `<button class="pokemon-icon-btn${isSel ? ' selected' : ''}${disabled ? ' disabled' : ''}"
@@ -1051,13 +1080,17 @@ function renderDeckListIcons(selectedIcons) {
       <span class="icon-name">${esc(i.name)}</span>
     </button>`;
   }).join('')}</div>`;
+}
 
-  return html;
+function renderDeckListIcons(selectedIcons) {
+  // 输入框已移至 index.html，此处只渲染图标网格
+  return renderDeckListIconGrid(selectedIcons);
 }
 
 function filterDeckIcons(term) {
   deckIconSearchTerm = term;
-  $('deckListIconPicker').innerHTML = renderDeckListIcons(selectedDeckListIcons);
+  const picker = $('deckListIconPicker');
+  if (picker) picker.innerHTML = renderDeckListIconGrid(selectedDeckListIcons);
 }
 
 function toggleDeckListIcon(iconId) {
@@ -1089,8 +1122,11 @@ function addDeckToList() {
   saveData();
   input.value = '';
   selectedDeckListIcons = [];
+  lastSuggestedDeckIcons = [];
   deckIconSearchTerm = '';
-  $('deckListIconPicker').innerHTML = renderDeckListIcons([]);
+  const searchInput = $('deckIconSearch');
+  if (searchInput) searchInput.value = '';
+  $('deckListIconPicker').innerHTML = renderDeckListIconGrid([]);
   $('deckListSelectedIcons').textContent = '未选择图标';
   renderDeckListManage();
   renderHistory();
@@ -1163,10 +1199,15 @@ let deckEditIconSearchTerm = '';
 
 function filterDeckEditIcons(term) {
   deckEditIconSearchTerm = term;
-  renderDeckListManage();
+  const grid = editingDeckListId ? document.getElementById(`deckEditIconGrid_${editingDeckListId}`) : null;
+  if (grid) {
+    grid.outerHTML = renderDeckEditIconGridOnly(editingDeckListId);
+  } else {
+    renderDeckListManage();
+  }
 }
 
-function renderDeckEditIconGrid(deckId) {
+function renderDeckEditIconGridOnly(deckId) {
   const entry = (state.personal.deckList || []).find(d => d.id === deckId);
   const selectedIcons = entry ? (entry.icons || []) : [];
   const term = (deckEditIconSearchTerm || '').toLowerCase().trim();
@@ -1174,12 +1215,7 @@ function renderDeckEditIconGrid(deckId) {
     ? DECK_ICONS.filter(i => i.name.toLowerCase().includes(term) || i.id.toLowerCase().includes(term))
     : DECK_ICONS;
 
-  let html = `<div class="deck-icon-search" style="margin-bottom:8px;">
-    <input type="text" id="deckEditIconSearch_${deckId}" class="deck-icon-search-input" placeholder="搜索宝可梦图标..." value="${esc(deckEditIconSearchTerm || '')}"
-      oninput="filterDeckEditIcons(this.value)" onclick="event.stopPropagation()">
-  </div>`;
-
-  html += `<div class="pokemon-icon-grid">${filtered.map(i => {
+  return `<div class="pokemon-icon-grid" id="deckEditIconGrid_${deckId}">${filtered.map(i => {
     const isSel = selectedIcons.includes(i.id);
     const disabled = !isSel && selectedIcons.length >= 2;
     return `<button class="pokemon-icon-btn${isSel ? ' selected' : ''}${disabled ? ' disabled' : ''}"
@@ -1188,8 +1224,13 @@ function renderDeckEditIconGrid(deckId) {
       <span class="icon-name">${esc(i.name)}</span>
     </button>`;
   }).join('')}</div>`;
+}
 
-  return html;
+function renderDeckEditIconGrid(deckId) {
+  return `<div class="deck-icon-search" style="margin-bottom:8px;">
+    <input type="text" id="deckEditIconSearch_${deckId}" class="deck-icon-search-input" placeholder="搜索宝可梦图标..." value="${esc(deckEditIconSearchTerm || '')}"
+      oninput="filterDeckEditIcons(this.value)" onclick="event.stopPropagation()">
+  </div>` + renderDeckEditIconGridOnly(deckId);
 }
 
 function renderDeckListManage() {
@@ -1702,6 +1743,23 @@ $('exportHistoryBtn').addEventListener('click', () => {
 $('addDeckListBtn').addEventListener('click', addDeckToList);
 $('newDeckListInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); addDeckToList(); }
+});
+$('newDeckListInput').addEventListener('input', (e) => {
+  const name = e.target.value;
+  const suggestions = suggestDeckIconsByName(name);
+
+  // 仅在用户未手动调整选择时自动应用推荐
+  const currentKey = JSON.stringify([...selectedDeckListIcons].sort());
+  const lastKey = JSON.stringify([...lastSuggestedDeckIcons].sort());
+  if (selectedDeckListIcons.length === 0 || currentKey === lastKey) {
+    selectedDeckListIcons = [...suggestions];
+  }
+  lastSuggestedDeckIcons = [...suggestions];
+
+  $('deckListIconPicker').innerHTML = renderDeckListIconGrid(selectedDeckListIcons);
+  $('deckListSelectedIcons').innerHTML = selectedDeckListIcons.length > 0
+    ? '已选: ' + renderDeckIcons(selectedDeckListIcons, 20)
+    : '未选择图标';
 });
 
 // 暴露全局函数（onclick 调用）

@@ -361,6 +361,20 @@ body {
 }
 .hist-opp:hover { background: rgba(59,109,233,0.18); }
 [data-theme="dark"] .hist-opp { color: #5b8def; }
+.pop-deck-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+.pop-deck-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
+}
 .hist-opp-placeholder {
   font-size: 10px;
   color: var(--text-3);
@@ -602,6 +616,13 @@ function render() {
   renderStatus();
 }
 
+function renderPopDeckIcons(ids) {
+  if (!ids || ids.length === 0) return '';
+  return '<span class="pop-deck-icons">' + ids.map(function(id) {
+    return '<img src="https://tcg.mik.moe/static/icon/' + esc(id) + '.png" class="pop-deck-icon" alt="">';
+  }).join('') + '</span>';
+}
+
 function renderHistory() {
   var h = ((data && data.personal) ? data.personal.matchHistory : null) || [];
   var deckList = (data && data.personal && data.personal.deckList) ? data.personal.deckList : [];
@@ -616,7 +637,7 @@ function renderHistory() {
     var delta = has ? '<span class="dw">+'+dw+'</span><span class="hist-sep">/</span><span class="dl">-'+dl+'</span>' : '<span style="color:var(--text-3)">切换</span>';
     var opp = x.opponentDeck || '';
     var deckEntry = opp ? deckList.find(function(dl){ return dl.name===opp; }) : null;
-    var oppIcons = '';
+    var oppIcons = deckEntry && deckEntry.icons ? renderPopDeckIcons(deckEntry.icons) : '';
 
     var oppHtml = '';
     if (x._editingOpp) {
@@ -628,7 +649,7 @@ function renderHistory() {
         '<button class="hist-btn-mini" onclick="savePopOpp(\''+esc(x.id)+'\')" title="保存">✓</button>'+
         '<button class="hist-btn-mini cancel" onclick="cancelPopOpp()" title="取消">✕</button></div>';
     } else if (opp) {
-      oppHtml = '<span class="hist-opp" onclick="editPopOpp(\''+esc(x.id)+'\')" title="点击修改">vs '+esc(opp)+'</span>';
+      oppHtml = '<span class="hist-opp" onclick="editPopOpp(\''+esc(x.id)+'\')" title="点击修改">'+oppIcons+' vs '+esc(opp)+'</span>';
     } else {
       oppHtml = '<span class="hist-opp-placeholder" onclick="editPopOpp(\''+esc(x.id)+'\')">+ 对手</span>';
     }
