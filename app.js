@@ -14,15 +14,189 @@ const CORS_PROXIES = [
 const STORAGE_KEY = 'ptcg-tracker-data';
 const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 分钟
 
-// 宝可梦类型图标
-const POKEMON_TYPES = [
-  { emoji: '🔥', name: '火' }, { emoji: '💧', name: '水' }, { emoji: '🌿', name: '草' },
-  { emoji: '⚡', name: '电' }, { emoji: '❄️', name: '冰' }, { emoji: '🥊', name: '格斗' },
-  { emoji: '☠️', name: '毒' }, { emoji: '🌍', name: '地面' }, { emoji: '🕊️', name: '飞行' },
-  { emoji: '🔮', name: '超能力' }, { emoji: '🐛', name: '虫' }, { emoji: '🪨', name: '岩石' },
-  { emoji: '👻', name: '幽灵' }, { emoji: '🐉', name: '龙' }, { emoji: '🌑', name: '恶' },
-  { emoji: '⚙️', name: '钢' }, { emoji: '✨', name: '妖精' }, { emoji: '⚪', name: '一般' },
+// areazero.top 宝可梦角色图标 (卡组分类图标)
+const DECK_ICONS = [
+  { id: 'urshifu-gmax', name: '一击武道熊师', url: 'https://tcg.mik.moe/static/icon/urshifu-gmax.png' },
+  { id: 'magneton', name: '三合一磁怪', url: 'https://tcg.mik.moe/static/icon/magneton.png' },
+  { id: 'malamar', name: '乌贼王', url: 'https://tcg.mik.moe/static/icon/malamar.png' },
+  { id: 'cinccino', name: '奇诺栗鼠', url: 'https://tcg.mik.moe/static/icon/cinccino.png' },
+  { id: 'honchkrow', name: '乌鸦头头', url: 'https://tcg.mik.moe/static/icon/honchkrow.png' },
+  { id: 'sylveon', name: '仙子伊布', url: 'https://tcg.mik.moe/static/icon/sylveon.png' },
+  { id: 'yveltal', name: '伊裴尔塔尔', url: 'https://tcg.mik.moe/static/icon/yveltal.png' },
+  { id: 'weezing-galar', name: '伽勒尔双弹瓦斯', url: 'https://tcg.mik.moe/static/icon/weezing-galar.png' },
+  { id: 'slowking-galar', name: '伽勒尔呆呆王', url: 'https://tcg.mik.moe/static/icon/slowking-galar.png' },
+  { id: 'moltres-galar', name: '伽勒尔火焰鸟', url: 'https://tcg.mik.moe/static/icon/moltres-galar.png' },
+  { id: 'zapdos-galar', name: '伽勒尔闪电鸟', url: 'https://tcg.mik.moe/static/icon/zapdos-galar.png' },
+  { id: 'glaceon', name: '冰伊布', url: 'https://tcg.mik.moe/static/icon/glaceon.png' },
+  { id: 'sableye', name: '勾魂眼', url: 'https://tcg.mik.moe/static/icon/sableye.png' },
+  { id: 'aerodactyl', name: '化石翼龙', url: 'https://tcg.mik.moe/static/icon/aerodactyl.png' },
+  { id: 'inteleon', name: '千面避役', url: 'https://tcg.mik.moe/static/icon/inteleon.png' },
+  { id: 'inteleon-gmax', name: '千面避役VMAX', url: 'https://tcg.mik.moe/static/icon/inteleon-gmax.png' },
+  { id: 'tapu-koko', name: '卡璞・鸣鸣', url: 'https://tcg.mik.moe/static/icon/tapu-koko.png' },
+  { id: 'crobat', name: '叉字蝠', url: 'https://tcg.mik.moe/static/icon/crobat.png' },
+  { id: 'chien-pao', name: '古剑豹', url: 'https://tcg.mik.moe/static/icon/chien-pao.png' },
+  { id: 'cramorant', name: '古月鸟', url: 'https://tcg.mik.moe/static/icon/cramorant.png' },
+  { id: 'porygon-z', name: '多边兽Z', url: 'https://tcg.mik.moe/static/icon/porygon-z.png' },
+  { id: 'leafeon', name: '叶伊布', url: 'https://tcg.mik.moe/static/icon/leafeon.png' },
+  { id: 'shaymin-sky', name: '谢米', url: 'https://tcg.mik.moe/static/icon/shaymin-sky.png' },
+  { id: 'trumbeak', name: '喇叭啄鸟', url: 'https://tcg.mik.moe/static/icon/trumbeak.png' },
+  { id: 'charizard', name: '喷火龙', url: 'https://tcg.mik.moe/static/icon/charizard.png' },
+  { id: 'braixen', name: '长尾火狐', url: 'https://tcg.mik.moe/static/icon/braixen.png' },
+  { id: 'charizard-gmax', name: '喷火龙VMAX', url: 'https://tcg.mik.moe/static/icon/charizard-gmax.png' },
+  { id: 'groudon', name: '固拉多', url: 'https://tcg.mik.moe/static/icon/groudon.png' },
+  { id: 'obstagoon', name: '堵拦熊', url: 'https://tcg.mik.moe/static/icon/obstagoon.png' },
+  { id: 'dragapult', name: '多龙巴鲁托', url: 'https://tcg.mik.moe/static/icon/dragapult.png' },
+  { id: 'lickilicky', name: '大舌舔', url: 'https://tcg.mik.moe/static/icon/lickilicky.png' },
+  { id: 'altaria', name: '七夕青鸟', url: 'https://tcg.mik.moe/static/icon/altaria.png' },
+  { id: 'beedrill', name: '大针蜂', url: 'https://tcg.mik.moe/static/icon/beedrill.png' },
+  { id: 'solrock', name: '太阳岩', url: 'https://tcg.mik.moe/static/icon/solrock.png' },
+  { id: 'lunatone', name: '月石', url: 'https://tcg.mik.moe/static/icon/lunatone.png' },
+  { id: 'archeops', name: '始祖大鸟', url: 'https://tcg.mik.moe/static/icon/archeops.png' },
+  { id: 'coalossal', name: '巨炭山', url: 'https://tcg.mik.moe/static/icon/coalossal.png' },
+  { id: 'stonjourner', name: '巨石丁', url: 'https://tcg.mik.moe/static/icon/stonjourner.png' },
+  { id: 'metagross', name: '巨金怪', url: 'https://tcg.mik.moe/static/icon/metagross.png' },
+  { id: 'granbull', name: '布鲁皇', url: 'https://tcg.mik.moe/static/icon/granbull.png' },
+  { id: 'blissey', name: '幸福蛋', url: 'https://tcg.mik.moe/static/icon/blissey.png' },
+  { id: 'basculegion', name: '幽尾玄鱼', url: 'https://tcg.mik.moe/static/icon/basculegion.png' },
+  { id: 'hitmonchan', name: '快拳郎', url: 'https://tcg.mik.moe/static/icon/hitmonchan.png' },
+  { id: 'guzzlord', name: '恶食大王', url: 'https://tcg.mik.moe/static/icon/guzzlord.png' },
+  { id: 'hitmontop', name: '战舞郎', url: 'https://tcg.mik.moe/static/icon/hitmontop.png' },
+  { id: 'lapras', name: '拉普拉斯', url: 'https://tcg.mik.moe/static/icon/lapras.png' },
+  { id: 'zekrom', name: '捷克罗姆', url: 'https://tcg.mik.moe/static/icon/zekrom.png' },
+  { id: 'zeraora', name: '捷拉奥拉', url: 'https://tcg.mik.moe/static/icon/zeraora.png' },
+  { id: 'bunnelby', name: '掘掘兔', url: 'https://tcg.mik.moe/static/icon/bunnelby.png' },
+  { id: 'eternatus', name: '无极汰那', url: 'https://tcg.mik.moe/static/icon/eternatus.png' },
+  { id: 'drednaw-gmax', name: '暴噬龟VMAX', url: 'https://tcg.mik.moe/static/icon/drednaw-gmax.png' },
+  { id: 'umbreon', name: '月亮伊布', url: 'https://tcg.mik.moe/static/icon/umbreon.png' },
+  { id: 'rowlet', name: '木木枭', url: 'https://tcg.mik.moe/static/icon/rowlet.png' },
+  { id: 'substitute', name: '未知', url: 'https://tcg.mik.moe/static/icon/substitute.png' },
+  { id: 'unown', name: '未知图腾', url: 'https://tcg.mik.moe/static/icon/unown.png' },
+  { id: 'trevenant', name: '朽木妖', url: 'https://tcg.mik.moe/static/icon/trevenant.png' },
+  { id: 'polteageist', name: '来悲茶', url: 'https://tcg.mik.moe/static/icon/polteageist.png' },
+  { id: 'mew', name: '梦幻', url: 'https://tcg.mik.moe/static/icon/mew.png' },
+  { id: 'jumpluff', name: '毽子棉', url: 'https://tcg.mik.moe/static/icon/jumpluff.png' },
+  { id: 'suicune', name: '水君', url: 'https://tcg.mik.moe/static/icon/suicune.png' },
+  { id: 'chandelure', name: '水晶灯火灵', url: 'https://tcg.mik.moe/static/icon/chandelure.png' },
+  { id: 'blastoise-gmax', name: '水箭龟VMAX', url: 'https://tcg.mik.moe/static/icon/blastoise-gmax.png' },
+  { id: 'gardevoir', name: '沙奈朵', url: 'https://tcg.mik.moe/static/icon/gardevoir.png' },
+  { id: 'sandaconda', name: '沙螺蟒', url: 'https://tcg.mik.moe/static/icon/sandaconda.png' },
+  { id: 'volcanion', name: '波尔凯尼恩', url: 'https://tcg.mik.moe/static/icon/volcanion.png' },
+  { id: 'golurk', name: '泥偶巨人', url: 'https://tcg.mik.moe/static/icon/golurk.png' },
+  { id: 'samurott-hisui', name: '洗翠大剑鬼', url: 'https://tcg.mik.moe/static/icon/samurott-hisui.png' },
+  { id: 'decidueye-hisui', name: '洗翠狙射树枭', url: 'https://tcg.mik.moe/static/icon/decidueye-hisui.png' },
+  { id: 'zoroark-hisui', name: '洗翠索罗亚克', url: 'https://tcg.mik.moe/static/icon/zoroark-hisui.png' },
+  { id: 'arcanine-hisui', name: '洗翠风速狗', url: 'https://tcg.mik.moe/static/icon/arcanine-hisui.png' },
+  { id: 'goodra-hisui', name: '洗翠黏美龙', url: 'https://tcg.mik.moe/static/icon/goodra-hisui.png' },
+  { id: 'lugia', name: '洛奇亚', url: 'https://tcg.mik.moe/static/icon/lugia.png' },
+  { id: 'flareon', name: '火伊布', url: 'https://tcg.mik.moe/static/icon/flareon.png' },
+  { id: 'moltres', name: '火焰鸟', url: 'https://tcg.mik.moe/static/icon/moltres.png' },
+  { id: 'blaziken', name: '火焰鸡', url: 'https://tcg.mik.moe/static/icon/blaziken.png' },
+  { id: 'entei', name: '炎帝', url: 'https://tcg.mik.moe/static/icon/entei.png' },
+  { id: 'ludicolo', name: '乐天河童', url: 'https://tcg.mik.moe/static/icon/ludicolo.png' },
+  { id: 'garchomp', name: '烈咬陆鲨', url: 'https://tcg.mik.moe/static/icon/garchomp.png' },
+  { id: 'rayquaza', name: '烈空坐', url: 'https://tcg.mik.moe/static/icon/rayquaza.png' },
+  { id: 'victini', name: '比克提尼', url: 'https://tcg.mik.moe/static/icon/victini.png' },
+  { id: 'centiskorch-gmax', name: '焚焰蚣VMAX', url: 'https://tcg.mik.moe/static/icon/centiskorch-gmax.png' },
+  { id: 'buzzwole', name: '爆肌蚊', url: 'https://tcg.mik.moe/static/icon/buzzwole.png' },
+  { id: 'decidueye', name: '狙射树枭', url: 'https://tcg.mik.moe/static/icon/decidueye.png' },
+  { id: 'espurr', name: '妙喵', url: 'https://tcg.mik.moe/static/icon/espurr.png' },
+  { id: 'persian', name: '猫老大', url: 'https://tcg.mik.moe/static/icon/persian.png' },
+  { id: 'weavile', name: '玛狃拉', url: 'https://tcg.mik.moe/static/icon/weavile.png' },
+  { id: 'tyranitar', name: '班基拉斯', url: 'https://tcg.mik.moe/static/icon/tyranitar.png' },
+  { id: 'koffing', name: '瓦斯弹', url: 'https://tcg.mik.moe/static/icon/koffing.png' },
+  { id: 'tsareena', name: '甜冷美后', url: 'https://tcg.mik.moe/static/icon/tsareena.png' },
+  { id: 'greninja', name: '甲贺忍蛙', url: 'https://tcg.mik.moe/static/icon/greninja.png' },
+  { id: 'calyrex-ice-rider', name: '白马蕾冠王', url: 'https://tcg.mik.moe/static/icon/calyrex-ice-rider.png' },
+  { id: 'ditto', name: '百变怪', url: 'https://tcg.mik.moe/static/icon/ditto.png' },
+  { id: 'pikachu', name: '皮卡丘', url: 'https://tcg.mik.moe/static/icon/pikachu.png' },
+  { id: 'clefairy', name: '皮皮', url: 'https://tcg.mik.moe/static/icon/clefairy.png' },
+  { id: 'kyogre', name: '盖欧卡', url: 'https://tcg.mik.moe/static/icon/kyogre.png' },
+  { id: 'cryogonal', name: '几何雪花', url: 'https://tcg.mik.moe/static/icon/cryogonal.png' },
+  { id: 'genesect', name: '盖诺赛克特', url: 'https://tcg.mik.moe/static/icon/genesect.png' },
+  { id: 'blacephalon', name: '砰头小丑', url: 'https://tcg.mik.moe/static/icon/blacephalon.png' },
+  { id: 'dhelmise', name: '破破舵轮', url: 'https://tcg.mik.moe/static/icon/dhelmise.png' },
+  { id: 'necrozma-ultra', name: '究极奈克洛兹玛', url: 'https://tcg.mik.moe/static/icon/necrozma-ultra.png' },
+  { id: 'solgaleo', name: '索尔迦雷欧', url: 'https://tcg.mik.moe/static/icon/solgaleo.png' },
+  { id: 'zoroark', name: '索罗亚克', url: 'https://tcg.mik.moe/static/icon/zoroark.png' },
+  { id: 'armarouge', name: '红莲铠骑', url: 'https://tcg.mik.moe/static/icon/armarouge.png' },
+  { id: 'melmetal', name: '美录梅塔', url: 'https://tcg.mik.moe/static/icon/melmetal.png' },
+  { id: 'meloetta', name: '美洛耶塔', url: 'https://tcg.mik.moe/static/icon/meloetta.png' },
+  { id: 'gengar-gmax', name: '耿鬼VMAX', url: 'https://tcg.mik.moe/static/icon/gengar-gmax.png' },
+  { id: 'magnezone', name: '自爆磁怪', url: 'https://tcg.mik.moe/static/icon/magnezone.png' },
+  { id: 'spiritomb', name: '花岩怪', url: 'https://tcg.mik.moe/static/icon/spiritomb.png' },
+  { id: 'comfey', name: '花疗环环', url: 'https://tcg.mik.moe/static/icon/comfey.png' },
+  { id: 'zacian-crowned', name: '苍响', url: 'https://tcg.mik.moe/static/icon/zacian-crowned.png' },
+  { id: 'flaaffy', name: '茸茸羊', url: 'https://tcg.mik.moe/static/icon/flaaffy.png' },
+  { id: 'reshiram', name: '莱希拉姆', url: 'https://tcg.mik.moe/static/icon/reshiram.png' },
+  { id: 'greedent', name: '藏饱栗鼠', url: 'https://tcg.mik.moe/static/icon/greedent.png' },
+  { id: 'charjabug', name: '虫电宝', url: 'https://tcg.mik.moe/static/icon/charjabug.png' },
+  { id: 'mimikyu', name: '谜拟丘', url: 'https://tcg.mik.moe/static/icon/mimikyu.png' },
+  { id: 'palkia-origin', name: '起源帕路奇亚', url: 'https://tcg.mik.moe/static/icon/palkia-origin.png' },
+  { id: 'noctowl', name: '猫头夜鹰', url: 'https://tcg.mik.moe/static/icon/noctowl.png' },
+  { id: 'dialga-origin', name: '起源帝牙卢卡', url: 'https://tcg.mik.moe/static/icon/dialga-origin.png' },
+  { id: 'metang', name: '金属怪', url: 'https://tcg.mik.moe/static/icon/metang.png' },
+  { id: 'mewtwo', name: '超梦', url: 'https://tcg.mik.moe/static/icon/mewtwo.png' },
+  { id: 'lucario', name: '路卡利欧', url: 'https://tcg.mik.moe/static/icon/lucario.png' },
+  { id: 'emolga', name: '电飞鼠', url: 'https://tcg.mik.moe/static/icon/emolga.png' },
+  { id: 'pachirisu', name: '帕奇利兹', url: 'https://tcg.mik.moe/static/icon/pachirisu.png' },
+  { id: 'darkrai', name: '达克莱伊', url: 'https://tcg.mik.moe/static/icon/darkrai.png' },
+  { id: 'urshifu-rapid-strike-gmax', name: '连击武道熊师', url: 'https://tcg.mik.moe/static/icon/urshifu-rapid-strike-gmax.png' },
+  { id: 'boltund', name: '逐电犬', url: 'https://tcg.mik.moe/static/icon/boltund.png' },
+  { id: 'corviknight', name: '钢铠鸦', url: 'https://tcg.mik.moe/static/icon/corviknight.png' },
+  { id: 'iron-valiant', name: '铁武者', url: 'https://tcg.mik.moe/static/icon/iron-valiant.png' },
+  { id: 'durant', name: '铁蚁', url: 'https://tcg.mik.moe/static/icon/durant.png' },
+  { id: 'duraludon-gmax', name: '铝钢龙VMAX', url: 'https://tcg.mik.moe/static/icon/duraludon-gmax.png' },
+  { id: 'silvally', name: '银伴战兽', url: 'https://tcg.mik.moe/static/icon/silvally.png' },
+  { id: 'vikavolt', name: '锹农炮虫', url: 'https://tcg.mik.moe/static/icon/vikavolt.png' },
+  { id: 'cinderace', name: '闪焰王牌', url: 'https://tcg.mik.moe/static/icon/cinderace.png' },
+  { id: 'zapdos', name: '闪电鸟', url: 'https://tcg.mik.moe/static/icon/zapdos.png' },
+  { id: 'arceus', name: '阿尔宙斯', url: 'https://tcg.mik.moe/static/icon/arceus.png' },
+  { id: 'gyarados', name: '暴鲤龙', url: 'https://tcg.mik.moe/static/icon/gyarados.png' },
+  { id: 'aggron', name: '波士可多拉', url: 'https://tcg.mik.moe/static/icon/aggron.png' },
+  { id: 'serperior', name: '君主蛇', url: 'https://tcg.mik.moe/static/icon/serperior.png' },
+  { id: 'vulpix-alola', name: '阿罗拉六尾', url: 'https://tcg.mik.moe/static/icon/vulpix-alola.png' },
+  { id: 'exeggutor-alola', name: '阿罗拉椰蛋树', url: 'https://tcg.mik.moe/static/icon/exeggutor-alola.png' },
+  { id: 'persian-alola', name: '阿罗拉猫老大', url: 'https://tcg.mik.moe/static/icon/persian-alola.png' },
+  { id: 'hoopa-unbound', name: '胡帕', url: 'https://tcg.mik.moe/static/icon/hoopa-unbound.png' },
+  { id: 'muk-alola', name: '阿罗拉臭臭泥', url: 'https://tcg.mik.moe/static/icon/muk-alola.png' },
+  { id: 'raichu-alola', name: '阿罗拉雷丘', url: 'https://tcg.mik.moe/static/icon/raichu-alola.png' },
+  { id: 'frosmoth', name: '雪绒蛾', url: 'https://tcg.mik.moe/static/icon/frosmoth.png' },
+  { id: 'raichu', name: '雷丘', url: 'https://tcg.mik.moe/static/icon/raichu.png' },
+  { id: 'jolteon', name: '雷伊布', url: 'https://tcg.mik.moe/static/icon/jolteon.png' },
+  { id: 'regigigas', name: '雷吉奇卡斯', url: 'https://tcg.mik.moe/static/icon/regigigas.png' },
+  { id: 'regieleki', name: '雷吉艾勒奇', url: 'https://tcg.mik.moe/static/icon/regieleki.png' },
+  { id: 'regidrago', name: '雷吉铎拉戈', url: 'https://tcg.mik.moe/static/icon/regidrago.png' },
+  { id: 'dracozolt', name: '雷鸟龙', url: 'https://tcg.mik.moe/static/icon/dracozolt.png' },
+  { id: 'alcremie-gmax', name: '霜奶仙VMAX', url: 'https://tcg.mik.moe/static/icon/alcremie-gmax.png' },
+  { id: 'lunala', name: '露奈雅拉', url: 'https://tcg.mik.moe/static/icon/lunala.png' },
+  { id: 'bronzong', name: '青铜钟', url: 'https://tcg.mik.moe/static/icon/bronzong.png' },
+  { id: 'electrode', name: '顽皮雷弹', url: 'https://tcg.mik.moe/static/icon/electrode.png' },
+  { id: 'hitmonlee', name: '飞腿郎', url: 'https://tcg.mik.moe/static/icon/hitmonlee.png' },
+  { id: 'seviper', name: '饭匙蛇', url: 'https://tcg.mik.moe/static/icon/seviper.png' },
+  { id: 'giratina-origin', name: '骑拉帝纳', url: 'https://tcg.mik.moe/static/icon/giratina-origin.png' },
+  { id: 'dusknoir', name: '黑夜魔灵', url: 'https://tcg.mik.moe/static/icon/dusknoir.png' },
+  { id: 'calyrex-shadow-rider', name: '黑马蕾冠王', url: 'https://tcg.mik.moe/static/icon/calyrex-shadow-rider.png' },
+  { id: 'tornadus', name: '龙卷云', url: 'https://tcg.mik.moe/static/icon/tornadus.png' },
 ];
+
+// 图标辅助函数
+function findDeckIcon(id) {
+  return DECK_ICONS.find(i => i.id === id);
+}
+
+function renderDeckIcon(id, size = 22) {
+  const icon = findDeckIcon(id);
+  if (icon) {
+    return `<img src="${icon.url}" alt="${esc(icon.name)}" class="deck-icon-img" style="width:${size}px;height:${size}px;object-fit:contain;" title="${esc(icon.name)}">`;
+  }
+  // 兼容旧数据：emoji 或未知字符串
+  return `<span class="deck-icon-fallback" style="font-size:${Math.max(12, size * 0.75)}px;" title="${esc(id)}">${esc(id)}</span>`;
+}
+
+function renderDeckIcons(ids, size = 22) {
+  if (!ids || ids.length === 0) return '';
+  return `<span class="deck-icons">${ids.map(id => renderDeckIcon(id, size)).join('')}</span>`;
+}
 
 // --- 工具函数 ---
 function uuid() {
@@ -39,6 +213,7 @@ let editingNote = null;
 let editingHistoryId = null;
 let selectedDeckListIcons = [];
 let editingDeckListId = null;
+let deckIconSearchTerm = '';
 let searchTerm = '';
 let autoRefreshTimer = null;
 let workingProxyIdx = 0; // 当前可用的代理索引
@@ -857,24 +1032,44 @@ function startRenameDeck(id) {
 
 function renderDeckListIcons(selectedIcons) {
   const icons = selectedIcons || [];
-  return POKEMON_TYPES.map(t => {
-    const isSel = icons.includes(t.emoji);
+  const term = (deckIconSearchTerm || '').toLowerCase().trim();
+  const filtered = term
+    ? DECK_ICONS.filter(i => i.name.toLowerCase().includes(term) || i.id.toLowerCase().includes(term))
+    : DECK_ICONS;
+
+  let html = `<div class="deck-icon-search">
+    <input type="text" id="deckIconSearch" class="deck-icon-search-input" placeholder="搜索宝可梦图标..." value="${esc(deckIconSearchTerm || '')}"
+      oninput="filterDeckIcons(this.value)" onclick="event.stopPropagation()">
+  </div>`;
+
+  html += `<div class="pokemon-icon-grid">${filtered.map(i => {
+    const isSel = icons.includes(i.id);
     const disabled = !isSel && icons.length >= 2;
     return `<button class="pokemon-icon-btn${isSel ? ' selected' : ''}${disabled ? ' disabled' : ''}"
-      onclick="toggleDeckListIcon('${t.emoji}')" title="${t.name}">${t.emoji}</button>`;
-  }).join('');
+      onclick="toggleDeckListIcon('${i.id}')" title="${esc(i.name)}">
+      <img src="${i.url}" alt="${esc(i.name)}" loading="lazy" style="width:28px;height:28px;object-fit:contain;">
+      <span class="icon-name">${esc(i.name)}</span>
+    </button>`;
+  }).join('')}</div>`;
+
+  return html;
 }
 
-function toggleDeckListIcon(emoji) {
-  const idx = selectedDeckListIcons.indexOf(emoji);
+function filterDeckIcons(term) {
+  deckIconSearchTerm = term;
+  $('deckListIconPicker').innerHTML = renderDeckListIcons(selectedDeckListIcons);
+}
+
+function toggleDeckListIcon(iconId) {
+  const idx = selectedDeckListIcons.indexOf(iconId);
   if (idx >= 0) {
     selectedDeckListIcons.splice(idx, 1);
   } else if (selectedDeckListIcons.length < 2) {
-    selectedDeckListIcons.push(emoji);
+    selectedDeckListIcons.push(iconId);
   }
   $('deckListIconPicker').innerHTML = renderDeckListIcons(selectedDeckListIcons);
-  $('deckListSelectedIcons').textContent = selectedDeckListIcons.length > 0
-    ? '已选: ' + selectedDeckListIcons.join(' ')
+  $('deckListSelectedIcons').innerHTML = selectedDeckListIcons.length > 0
+    ? '已选: ' + renderDeckIcons(selectedDeckListIcons, 20)
     : '未选择图标';
 }
 
@@ -894,6 +1089,7 @@ function addDeckToList() {
   saveData();
   input.value = '';
   selectedDeckListIcons = [];
+  deckIconSearchTerm = '';
   $('deckListIconPicker').innerHTML = renderDeckListIcons([]);
   $('deckListSelectedIcons').textContent = '未选择图标';
   renderDeckListManage();
@@ -914,6 +1110,7 @@ function removeDeckFromList(id) {
 
 function startEditDeckList(id) {
   editingDeckListId = id;
+  deckEditIconSearchTerm = '';
   renderDeckListManage();
 }
 
@@ -936,6 +1133,7 @@ function saveEditDeckList(id) {
   });
   saveData();
   editingDeckListId = null;
+  deckEditIconSearchTerm = '';
   renderDeckListManage();
   renderHistory();
   showToast('已更新', 'success');
@@ -943,21 +1141,55 @@ function saveEditDeckList(id) {
 
 function cancelEditDeckList() {
   editingDeckListId = null;
+  deckEditIconSearchTerm = '';
   renderDeckListManage();
 }
 
-function toggleDeckListEditIcon(deckId, emoji) {
+function toggleDeckListEditIcon(deckId, iconId) {
   const entry = (state.personal.deckList || []).find(d => d.id === deckId);
   if (!entry) return;
   if (!entry.icons) entry.icons = [];
-  const idx = entry.icons.indexOf(emoji);
+  const idx = entry.icons.indexOf(iconId);
   if (idx >= 0) {
     entry.icons.splice(idx, 1);
   } else if (entry.icons.length < 2) {
-    entry.icons.push(emoji);
+    entry.icons.push(iconId);
   }
   saveData();
   renderDeckListManage();
+}
+
+let deckEditIconSearchTerm = '';
+
+function filterDeckEditIcons(term) {
+  deckEditIconSearchTerm = term;
+  renderDeckListManage();
+}
+
+function renderDeckEditIconGrid(deckId) {
+  const entry = (state.personal.deckList || []).find(d => d.id === deckId);
+  const selectedIcons = entry ? (entry.icons || []) : [];
+  const term = (deckEditIconSearchTerm || '').toLowerCase().trim();
+  const filtered = term
+    ? DECK_ICONS.filter(i => i.name.toLowerCase().includes(term) || i.id.toLowerCase().includes(term))
+    : DECK_ICONS;
+
+  let html = `<div class="deck-icon-search" style="margin-bottom:8px;">
+    <input type="text" id="deckEditIconSearch_${deckId}" class="deck-icon-search-input" placeholder="搜索宝可梦图标..." value="${esc(deckEditIconSearchTerm || '')}"
+      oninput="filterDeckEditIcons(this.value)" onclick="event.stopPropagation()">
+  </div>`;
+
+  html += `<div class="pokemon-icon-grid">${filtered.map(i => {
+    const isSel = selectedIcons.includes(i.id);
+    const disabled = !isSel && selectedIcons.length >= 2;
+    return `<button class="pokemon-icon-btn${isSel ? ' selected' : ''}${disabled ? ' disabled' : ''}"
+      onclick="toggleDeckListEditIcon('${deckId}','${i.id}')" title="${esc(i.name)}">
+      <img src="${i.url}" alt="${esc(i.name)}" loading="lazy" style="width:28px;height:28px;object-fit:contain;">
+      <span class="icon-name">${esc(i.name)}</span>
+    </button>`;
+  }).join('')}</div>`;
+
+  return html;
 }
 
 function renderDeckListManage() {
@@ -968,33 +1200,31 @@ function renderDeckListManage() {
     return;
   }
   container.innerHTML = deckList.map(d => {
-    const icons = (d.icons || []).join('') || '—';
+    const iconsHtml = renderDeckIcons(d.icons, 20);
 
     if (editingDeckListId === d.id) {
-      return `<div class="deck-list-entry" style="border-color:var(--info);background:rgba(59,109,233,0.04);">
-        <div class="deck-list-entry-info" style="flex:1;">
-          <input class="deck-item-edit-input" id="deckListEditInput_${d.id}" value="${esc(d.name)}" maxlength="30"
-            style="width:180px;"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();saveEditDeckList('${d.id}');}else if(event.key==='Escape'){cancelEditDeckList();}">
-          <div class="deck-list-edit-icons">
-            ${POKEMON_TYPES.map(t => {
-              const sel = (d.icons || []).includes(t.emoji);
-              const dis = !sel && (d.icons || []).length >= 2;
-              return `<button class="pokemon-icon-btn${sel ? ' selected' : ''}${dis ? ' disabled' : ''}"
-                onclick="toggleDeckListEditIcon('${d.id}','${t.emoji}')" title="${t.name}">${t.emoji}</button>`;
-            }).join('')}
+      return `<div class="deck-list-entry deck-list-entry-editing" style="flex-direction:column;align-items:stretch;border-color:var(--info);background:rgba(59,109,233,0.04);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            ${iconsHtml || '<span style="color:var(--text-muted);font-size:13px;">—</span>'}
+            <input class="deck-item-edit-input" id="deckListEditInput_${d.id}" value="${esc(d.name)}" maxlength="30"
+              style="width:180px;"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();saveEditDeckList('${d.id}');}else if(event.key==='Escape'){cancelEditDeckList();}">
+          </div>
+          <div class="deck-list-entry-actions">
+            <button class="btn-deck-action" onclick="saveEditDeckList('${d.id}')" title="保存">✓</button>
+            <button class="btn-deck-action danger" onclick="cancelEditDeckList()" title="取消">✕</button>
           </div>
         </div>
-        <div class="deck-list-entry-actions">
-          <button class="btn-deck-action" onclick="saveEditDeckList('${d.id}')" title="保存">✓</button>
-          <button class="btn-deck-action danger" onclick="cancelEditDeckList()" title="取消">✕</button>
+        <div class="deck-list-edit-icons">
+          ${renderDeckEditIconGrid(d.id)}
         </div>
       </div>`;
     }
 
     return `<div class="deck-list-entry">
       <div class="deck-list-entry-info">
-        <span class="deck-list-entry-icons">${icons}</span>
+        <span class="deck-list-entry-icons">${iconsHtml || '—'}</span>
         <span class="deck-list-entry-name">${esc(d.name)}</span>
       </div>
       <div class="deck-list-entry-actions">
@@ -1039,7 +1269,7 @@ function renderMatchupAnalysis() {
   el.style.display = 'block';
   tbody.innerHTML = rows.map(r => {
     const deckEntry = (p.deckList || []).find(d => d.name === r.name);
-    const iconsHtml = deckEntry && deckEntry.icons ? deckEntry.icons.join('') : '';
+    const iconsHtml = deckEntry && deckEntry.icons ? renderDeckIcons(deckEntry.icons, 16) : '';
     const wrColor = r.wr >= 60 ? 'var(--accent)' : r.wr >= 40 ? 'var(--warning)' : 'var(--danger)';
     return `<tr>
       <td><span class="matchup-opp-name">${iconsHtml ? '<span style="font-size:14px;">' + iconsHtml + '</span>' : ''}${esc(r.name)}</span></td>
@@ -1078,11 +1308,10 @@ function renderHistory() {
     const timeStr = `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     const opponentDeck = h.opponentDeck || '';
 
-    // 下拉选项
+    // 下拉选项（select 不支持图片，仅显示名称）
     const selectOptions = deckList.map(dl => {
       const sel = dl.name === opponentDeck ? ' selected' : '';
-      const iconStr = (dl.icons || []).join('');
-      return `<option value="${esc(dl.name)}"${sel}>${iconStr} ${esc(dl.name)}</option>`;
+      return `<option value="${esc(dl.name)}"${sel}>${esc(dl.name)}</option>`;
     }).join('');
 
     // 编辑模式
@@ -1107,7 +1336,7 @@ function renderHistory() {
 
     // 正常显示模式
     const deckEntry = opponentDeck ? (deckList.find(dl => dl.name === opponentDeck)) : null;
-    const opponentIcons = deckEntry ? (deckEntry.icons || []).join('') : '';
+    const opponentIcons = deckEntry ? renderDeckIcons(deckEntry.icons, 18) : '';
     const opponentHtml = opponentDeck
       ? `<span class="history-opponent" onclick="editHistoryOpponent('${esc(h.id)}')" style="cursor:pointer;" title="点击修改">${opponentIcons} vs ${esc(opponentDeck)}</span>`
       : `<span class="history-opponent empty" onclick="editHistoryOpponent('${esc(h.id)}')">+ 对手卡组</span>`;

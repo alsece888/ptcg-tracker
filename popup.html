@@ -616,20 +616,19 @@ function renderHistory() {
     var delta = has ? '<span class="dw">+'+dw+'</span><span class="hist-sep">/</span><span class="dl">-'+dl+'</span>' : '<span style="color:var(--text-3)">切换</span>';
     var opp = x.opponentDeck || '';
     var deckEntry = opp ? deckList.find(function(dl){ return dl.name===opp; }) : null;
-    var oppIcons = deckEntry ? (deckEntry.icons||[]).join('') : '';
+    var oppIcons = '';
 
     var oppHtml = '';
     if (x._editingOpp) {
       var opts = deckList.map(function(dl){
         var sel = dl.name===opp ? ' selected' : '';
-        var istr = (dl.icons||[]).join('');
-        return '<option value="'+esc(dl.name)+'"'+sel+'>'+istr+' '+esc(dl.name)+'</option>';
+        return '<option value="'+esc(dl.name)+'"'+sel+'>'+esc(dl.name)+'</option>';
       }).join('');
       oppHtml = '<div class="hist-right-row"><select class="hist-opp-select" id="popSel_'+esc(x.id)+'"><option value="">--</option>'+opts+'</select>'+
         '<button class="hist-btn-mini" onclick="savePopOpp(\''+esc(x.id)+'\')" title="保存">✓</button>'+
         '<button class="hist-btn-mini cancel" onclick="cancelPopOpp()" title="取消">✕</button></div>';
     } else if (opp) {
-      oppHtml = '<span class="hist-opp" onclick="editPopOpp(\''+esc(x.id)+'\')" title="点击修改">'+oppIcons+' vs '+esc(opp)+'</span>';
+      oppHtml = '<span class="hist-opp" onclick="editPopOpp(\''+esc(x.id)+'\')" title="点击修改">vs '+esc(opp)+'</span>';
     } else {
       oppHtml = '<span class="hist-opp-placeholder" onclick="editPopOpp(\''+esc(x.id)+'\')">+ 对手</span>';
     }
