@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MALO-TCG 战绩</title>
+<style>
+:root,
+[data-theme="light"] {
+  --bg-deco-1: radial-gradient(circle at 70% 15%, rgba(12,175,123,0.22) 0%, transparent 65%);
+  --bg-deco-2: radial-gradient(circle at 15% 85%, rgba(233,69,96,0.18) 0%, transparent 60%);
+  --bg-deco-3: radial-gradient(circle at 85% 55%, rgba(59,109,233,0.12) 0%, transparent 55%);
+  --glass: rgba(255,255,255,0.42);
+  --glass-hover: rgba(255,255,255,0.55);
+  --glass-strong: rgba(255,255,255,0.35);
+  --glass-edge: rgba(255,255,255,0.25);
+  --text: #1a1d23;
+  --text-2: #5f6672;
+  --text-3: #939aa5;
+  --accent: #0caf7b;
+  --accent-glow: rgba(12,175,123,0.35);
+  --accent-bg: rgba(12,175,123,0.1);
+  --danger: #e5534b;
+  --danger-glow: rgba(229,83,75,0.3);
+  --danger-bg: rgba(229,83,75,0.1);
+  --divider: rgba(0,0,0,0.06);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+  --blur: blur(20px);
+  --blur-heavy: blur(28px);
+}
+[data-theme="dark"] {
+  --bg-deco-1: radial-gradient(circle at 70% 15%, rgba(78,204,163,0.18) 0%, transparent 65%);
+  --bg-deco-2: radial-gradient(circle at 15% 85%, rgba(233,69,96,0.14) 0%, transparent 60%);
+  --bg-deco-3: radial-gradient(circle at 85% 55%, rgba(59,109,233,0.1) 0%, transparent 55%);
+  --glass: rgba(23,27,35,0.45);
+  --glass-hover: rgba(23,27,35,0.58);
+  --glass-strong: rgba(23,27,35,0.38);
+  --glass-edge: rgba(255,255,255,0.06);
+  --text: #e1e4e8;
+  --text-2: #8b929a;
+  --text-3: #5c6270;
+  --accent: #4ecca3;
+  --accent-glow: rgba(78,204,163,0.3);
+  --accent-bg: rgba(78,204,163,0.1);
+  --danger: #e5534b;
+  --danger-glow: rgba(229,83,75,0.25);
+  --danger-bg: rgba(229,83,75,0.1);
+  --divider: rgba(255,255,255,0.05);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
+  --blur: blur(20px);
+  --blur-heavy: blur(28px);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+  min-width: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 100vh;
+  /* No padding — content fills window edge-to-edge */
+  padding: 0;
+  position: relative;
+  background: transparent;
+}
+
+/* ===== Background Decoration Layer ===== */
+.bg-deco {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.bg-deco .blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+}
+.bg-blob-1 {
+  width: 220px; height: 220px;
+  top: -40px; right: -60px;
+  background: var(--bg-deco-1);
+}
+.bg-blob-2 {
+  width: 200px; height: 200px;
+  bottom: -50px; left: -50px;
+  background: var(--bg-deco-2);
+}
+.bg-blob-3 {
+  width: 140px; height: 140px;
+  top: 40%; right: -30px;
+  background: var(--bg-deco-3);
+}
+
+/* ===== Content Layer ===== */
+.content-layer {
+  position: relative;
+  z-index: 1;
+  padding: 10px 12px 8px;
+}
+
+/* ===== Glass Panel Mixin ===== */
+.glass-panel {
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-radius: 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.06), inset 0 0 0 0.5px var(--glass-edge);
+}
+
+/* ===== Header ===== */
+.p-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+}
+.p-logo-row { display: flex; align-items: center; gap: 6px; }
+.p-logo { height: 18px; width: auto; opacity: 0.85; }
+.p-logo-text { font-size: 12px; font-weight: 700; color: var(--text-2); letter-spacing: 0.3px; }
+.p-btn-refresh {
+  width: 30px; height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  color: var(--text-2);
+  box-shadow: inset 0 0 0 0.5px var(--glass-edge);
+}
+.p-btn-refresh:hover { color: var(--accent); transform: scale(1.08); box-shadow: 0 2px 12px var(--accent-glow); }
+.p-btn-refresh:active { transform: scale(0.92); }
+
+/* ===== Gauge Section ===== */
+.gauge-section {
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+}
+.gauge {
+  position: relative;
+  width: 120px; height: 120px;
+}
+.gauge-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur-heavy);
+  -webkit-backdrop-filter: var(--blur-heavy);
+  box-shadow: inset 0 0 0 0.5px var(--glass-edge);
+}
+.gauge-svg-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gauge-svg { transform: rotate(-90deg); width: 90px; height: 90px; }
+.gauge-bg {
+  fill: none;
+  stroke: var(--divider);
+  stroke-width: 8;
+}
+.gauge-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  filter: drop-shadow(0 0 8px var(--accent-glow));
+}
+.gauge-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+.gauge-pct {
+  font-size: 27px;
+  font-weight: 800;
+  font-family: var(--mono);
+  line-height: 1;
+  color: var(--text);
+}
+.gauge-label {
+  font-size: 10px;
+  color: var(--text-3);
+  font-weight: 600;
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+/* ===== Deck Selector ===== */
+.deck-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 3px 3px 14px;
+}
+.deck-icon { font-size: 15px; flex-shrink: 0; }
+.deck-select {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font);
+  cursor: pointer;
+  padding: 9px 0;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.deck-arrow { font-size: 10px; color: var(--text-3); margin-right: 10px; pointer-events: none; }
+
+/* ===== Win / Loss ===== */
+.wl-row { display: flex; gap: 10px; padding: 0 14px 0 14px; }
+.wl-card {
+  flex: 1;
+  border-radius: 12px;
+  padding: 14px 10px;
+  text-align: center;
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.wl-card:hover { transform: translateY(-2px); }
+.wl-card.win {
+  background: var(--accent-bg);
+  box-shadow: inset 0 0 0 0.5px rgba(12,175,123,0.2);
+}
+.wl-card.win:hover { box-shadow: 0 4px 16px var(--accent-glow), inset 0 0 0 0.5px rgba(12,175,123,0.25); }
+.wl-card.lose {
+  background: var(--danger-bg);
+  box-shadow: inset 0 0 0 0.5px rgba(229,83,75,0.18);
+}
+.wl-card.lose:hover { box-shadow: 0 4px 16px var(--danger-glow), inset 0 0 0 0.5px rgba(229,83,75,0.22); }
+.wl-card .wl-icon { font-size: 18px; margin-bottom: 2px; }
+.wl-card .wl-num {
+  font-size: 27px;
+  font-weight: 800;
+  font-family: var(--mono);
+  line-height: 1.1;
+}
+.wl-card.win .wl-num { color: var(--accent); text-shadow: 0 0 12px var(--accent-glow); }
+.wl-card.lose .wl-num { color: var(--danger); text-shadow: 0 0 12px var(--danger-glow); }
+.wl-card .wl-label { font-size: 11px; color: var(--text-2); font-weight: 600; }
+
+/* ===== Total Badge (standalone, not glass panel) ===== */
+.total-badge {
+  text-align: center;
+  padding: 2px 0 8px;
+}
+.total-badge span {
+  display: inline-block;
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border-radius: 20px;
+  padding: 5px 18px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  font-family: var(--mono);
+  box-shadow: inset 0 0 0 0.5px var(--glass-edge);
+}
+
+/* ===== API Mini ===== */
+.api-mini {
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+}
+.api-mini-item .ami-val {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--text);
+}
+.api-mini-item .ami-lbl { font-size: 10px; color: var(--text-3); margin-top: 1px; }
+.api-mini-divider { width: 1px; background: var(--divider); }
+
+/* ===== History ===== */
+.history-section { padding: 10px 14px; }
+.history-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.history-list { max-height: 130px; overflow-y: auto; }
+.history-list::-webkit-scrollbar { width: 3px; }
+.history-list::-webkit-scrollbar-track { background: transparent; }
+.history-list::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 3px; }
+.hist-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin-bottom: 3px;
+  background: var(--glass-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+.hist-item:last-child { margin-bottom: 0; }
+.hist-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hist-deck-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.hist-deck-dot.win { background: var(--accent); box-shadow: 0 0 6px var(--accent-glow); }
+.hist-deck-dot.lose { background: var(--danger); box-shadow: 0 0 6px var(--danger-glow); }
+.hist-deck-dot.neutral { background: var(--text-3); }
+.hist-deck-name {
+  font-size: 11px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 75px;
+}
+.hist-delta { font-size: 11px; font-family: var(--mono); white-space: nowrap; display: flex; gap: 3px; }
+.hist-delta .dw { color: var(--accent); font-weight: 700; }
+.hist-delta .dl { color: var(--danger); font-weight: 700; }
+.hist-sep { color: var(--text-3); }
+.hist-opp {
+  font-size: 10px;
+  color: #3b6de9;
+  background: rgba(59,109,233,0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.hist-opp:hover { background: rgba(59,109,233,0.18); }
+[data-theme="dark"] .hist-opp { color: #5b8def; }
+.hist-opp-placeholder {
+  font-size: 10px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px dashed var(--text-3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.hist-opp-placeholder:hover { color: #3b6de9; border-color: #3b6de9; }
+.hist-opp-select {
+  font-size: 10px;
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-edge);
+  border-radius: 3px;
+  padding: 2px 4px;
+  color: var(--text);
+  font-family: var(--font);
+  cursor: pointer;
+  max-width: 100px;
+  outline: none;
+}
+.hist-opp-select:focus { border-color: #3b6de9; }
+.hist-opp-select option { font-size: 10px; }
+.hist-right-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.hist-btn-mini {
+  width: 18px; height: 18px;
+  border: none;
+  border-radius: 3px;
+  background: var(--glass-strong);
+  cursor: pointer;
+  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  padding: 0;
+  transition: all 0.15s;
+}
+.hist-btn-mini:hover { color: var(--accent); }
+.hist-btn-mini.cancel:hover { color: var(--danger); }
+.hist-time { font-size: 10px; color: var(--text-3); font-family: var(--mono); flex-shrink: 0; margin-left: 4px; }
+.hist-empty { text-align: center; padding: 14px 8px; color: var(--text-3); font-size: 11px; }
+
+/* ===== Status ===== */
+.p-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-3);
+  padding: 6px 0 4px;
+}
+.p-status-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+.p-status-dot.stale { background: var(--text-3); box-shadow: none; }
+
+/* ===== Empty ===== */
+.empty-state {
+  text-align: center;
+  padding: 60px 16px;
+  color: var(--text-3);
+  font-size: 13px;
+  position: relative;
+  z-index: 1;
+}
+.empty-icon { font-size: 42px; margin-bottom: 10px; opacity: 0.45; }
+
+/* ===== Scrollbar ===== */
+body::-webkit-scrollbar { width: 4px; }
+body::-webkit-scrollbar-track { background: transparent; }
+body::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- Background decorative blobs (blurred by glass panels above) -->
+<div class="bg-deco">
+  <div class="blob bg-blob-1"></div>
+  <div class="blob bg-blob-2"></div>
+  <div class="blob bg-blob-3"></div>
+</div>
+
+<!-- Content -->
+<div id="noPlayer" class="empty-state">
+  <div class="empty-icon">🃏</div>
+  <p>请先在主页面<br>设置昵称和卡组</p>
+</div>
+
+<div id="content" class="content-layer" style="display:none;">
+
+  <!-- Header -->
+  <div class="glass-panel p-header">
+    <div class="p-logo-row">
+      <img src="malo-tcg-logo.png" alt="MALO-TCG" class="p-logo">
+      <span class="p-logo-text">战绩追踪</span>
+    </div>
+    <button class="p-btn-refresh" onclick="requestRefresh()" title="刷新数据">🔄</button>
+  </div>
+
+  <!-- Gauge -->
+  <div class="gauge-section">
+    <div class="gauge">
+      <div class="gauge-ring"></div>
+      <div class="gauge-svg-wrap">
+        <svg class="gauge-svg" viewBox="0 0 90 90">
+          <circle class="gauge-bg" cx="45" cy="45" r="38"/>
+          <circle class="gauge-fill" id="gFill" cx="45" cy="45" r="38"
+            stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+        </svg>
+      </div>
+      <div class="gauge-text">
+        <div class="gauge-pct" id="gPct">--</div>
+        <div class="gauge-label">胜率</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deck -->
+  <div class="glass-panel deck-row">
+    <span class="deck-icon">🃏</span>
+    <select id="deckSel" class="deck-select"></select>
+    <span class="deck-arrow">▾</span>
+  </div>
+
+  <!-- Win / Loss -->
+  <div class="wl-row">
+    <div class="wl-card win">
+      <div class="wl-icon">⚔</div>
+      <div class="wl-num" id="deckWins">0</div>
+      <div class="wl-label">胜场</div>
+    </div>
+    <div class="wl-card lose">
+      <div class="wl-icon">💀</div>
+      <div class="wl-num" id="deckLosses">0</div>
+      <div class="wl-label">败场</div>
+    </div>
+  </div>
+
+  <!-- Total -->
+  <div class="total-badge"><span id="deckTotal">合计 0 场</span></div>
+
+  <!-- API -->
+  <div class="glass-panel api-mini" id="apiMini" style="display:none;">
+    <div class="api-mini-item"><div class="ami-val" id="apiRank">--</div><div class="ami-lbl">排名</div></div>
+    <div class="api-mini-divider"></div>
+    <div class="api-mini-item"><div class="ami-val" id="apiExp">--</div><div class="ami-lbl">积分</div></div>
+    <div class="api-mini-divider"></div>
+    <div class="api-mini-item"><div class="ami-val" id="apiTotal">--</div><div class="ami-lbl">总场</div></div>
+  </div>
+
+  <!-- History -->
+  <div class="glass-panel history-section" id="historySection">
+    <div class="history-title">📋 对局历史</div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+
+  <!-- Status -->
+  <div class="p-status">
+    <span class="p-status-dot" id="stDot"></span>
+    <span id="stText">就绪</span>
+    <span id="stTime" style="margin-left:4px;"></span>
+  </div>
+</div>
+
+<script>
+var STORAGE_KEY = 'ptcg-tracker-data';
+var channel = new BroadcastChannel('ptcg-sync');
+var CIRCUMFERENCE = 2 * Math.PI * 38;
+var data = null;
+
+function loadData() {
+  try { var r = localStorage.getItem(STORAGE_KEY); data = r ? JSON.parse(r) : null; } catch (e) { data = null; }
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+function byId(id) { return document.getElementById(id); }
+
+function render() {
+  loadData();
+  var p = data && data.personal;
+  var hasPlayer = p && p.playerName;
+  var decks = (p && p.decks) || {};
+  var deckIds = Object.keys(decks);
+  var curId = (p && p.currentDeckId && decks[p.currentDeckId]) ? p.currentDeckId : (deckIds[0] || null);
+
+  if (!hasPlayer || deckIds.length === 0) {
+    byId('noPlayer').style.display = 'block';
+    byId('content').style.display = 'none';
+    return;
+  }
+  byId('noPlayer').style.display = 'none';
+  byId('content').style.display = 'block';
+
+  var sel = byId('deckSel');
+  sel.innerHTML = deckIds.map(function(id) {
+    return '<option value="' + id + '"' + (id === curId ? ' selected' : '') + '>' + esc(decks[id].name) + '</option>';
+  }).join('');
+  sel.value = curId || '';
+
+  var cur = decks[curId];
+  var accW = cur ? (cur.accumulatedWins || 0) : 0;
+  var accL = cur ? (cur.accumulatedLosses || 0) : 0;
+  var apiW = (p && p.lastApiWins !== undefined) ? p.lastApiWins : (cur ? (cur.snapshotWins || 0) : 0);
+  var apiL = (p && p.lastApiLosses !== undefined) ? p.lastApiLosses : (cur ? (cur.snapshotLosses || 0) : 0);
+  var snapW = cur ? (cur.snapshotWins || 0) : 0;
+  var snapL = cur ? (cur.snapshotLosses || 0) : 0;
+  var curW = accW + Math.max(0, apiW - snapW);
+  var curL = accL + Math.max(0, apiL - snapL);
+  var total = curW + curL;
+  var wr = total > 0 ? (curW / total * 100) : 0;
+
+  byId('gFill').setAttribute('stroke-dashoffset', CIRCUMFERENCE * (1 - wr / 100));
+  byId('gPct').textContent = total > 0 ? wr.toFixed(1) + '%' : '--';
+  byId('deckWins').textContent = curW;
+  byId('deckLosses').textContent = curL;
+  byId('deckTotal').textContent = '合计 ' + total + ' 场';
+
+  var pd = data && data.players && data.players[p.playerName];
+  if (pd && pd.winTotal !== null && pd.loseTotal !== null) {
+    byId('apiMini').style.display = 'flex';
+    byId('apiRank').textContent = pd.rank ? '#' + pd.rank : '--';
+    byId('apiExp').textContent = pd.exp !== null ? pd.exp : '--';
+    byId('apiTotal').textContent = (pd.winTotal + pd.loseTotal);
+  } else { byId('apiMini').style.display = 'none'; }
+
+  renderHistory();
+  renderStatus();
+}
+
+function renderHistory() {
+  var h = ((data && data.personal) ? data.personal.matchHistory : null) || [];
+  var deckList = (data && data.personal && data.personal.deckList) ? data.personal.deckList : [];
+  var c = byId('historyList');
+  if (h.length === 0) { c.innerHTML = '<div class="hist-empty">暂无记录 · 获取战绩后自动生成</div>'; return; }
+  var items = h.slice(-10).reverse();
+  c.innerHTML = items.map(function(x) {
+    var d = x.time ? new Date(x.time) : new Date();
+    var ts = (d.getMonth()+1)+'/'+d.getDate()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+    var dw = x.deltaWins || 0, dl = x.deltaLosses || 0, has = dw>0||dl>0;
+    var dc = has ? (dw>dl?'win':'lose') : 'neutral';
+    var delta = has ? '<span class="dw">+'+dw+'</span><span class="hist-sep">/</span><span class="dl">-'+dl+'</span>' : '<span style="color:var(--text-3)">切换</span>';
+    var opp = x.opponentDeck || '';
+    var deckEntry = opp ? deckList.find(function(dl){ return dl.name===opp; }) : null;
+    var oppIcons = deckEntry ? (deckEntry.icons||[]).join('') : '';
+
+    var oppHtml = '';
+    if (x._editingOpp) {
+      var opts = deckList.map(function(dl){
+        var sel = dl.name===opp ? ' selected' : '';
+        var istr = (dl.icons||[]).join('');
+        return '<option value="'+esc(dl.name)+'"'+sel+'>'+istr+' '+esc(dl.name)+'</option>';
+      }).join('');
+      oppHtml = '<div class="hist-right-row"><select class="hist-opp-select" id="popSel_'+esc(x.id)+'"><option value="">--</option>'+opts+'</select>'+
+        '<button class="hist-btn-mini" onclick="savePopOpp(\''+esc(x.id)+'\')" title="保存">✓</button>'+
+        '<button class="hist-btn-mini cancel" onclick="cancelPopOpp()" title="取消">✕</button></div>';
+    } else if (opp) {
+      oppHtml = '<span class="hist-opp" onclick="editPopOpp(\''+esc(x.id)+'\')" title="点击修改">'+oppIcons+' vs '+esc(opp)+'</span>';
+    } else {
+      oppHtml = '<span class="hist-opp-placeholder" onclick="editPopOpp(\''+esc(x.id)+'\')">+ 对手</span>';
+    }
+
+    return '<div class="hist-item"><div class="hist-left"><span class="hist-deck-dot '+dc+'"></span><span class="hist-deck-name" title="'+esc(x.deckName||'')+'">'+esc(x.deckName||'')+'</span><span class="hist-delta">'+delta+'</span>'+oppHtml+'</div><span class="hist-time">'+ts+'</span></div>';
+  }).join('');
+}
+
+function editPopOpp(id) {
+  if (!data || !data.personal || !data.personal.matchHistory) return;
+  data.personal.matchHistory.forEach(function(h) { delete h._editingOpp; });
+  var entry = data.personal.matchHistory.find(function(h){ return h.id===id; });
+  if (entry) entry._editingOpp = true;
+  render();
+}
+
+function cancelPopOpp() {
+  if (!data || !data.personal || !data.personal.matchHistory) return;
+  data.personal.matchHistory.forEach(function(h) { delete h._editingOpp; });
+  render();
+}
+
+function savePopOpp(id) {
+  var sel = document.getElementById('popSel_'+id);
+  if (!sel) { cancelPopOpp(); return; }
+  if (!data || !data.personal || !data.personal.matchHistory) return;
+  data.personal.matchHistory.forEach(function(h) { delete h._editingOpp; });
+  var entry = data.personal.matchHistory.find(function(h){ return h.id===id; });
+  if (entry) {
+    var val = sel.value;
+    if (val) { entry.opponentDeck = val; }
+    else { delete entry.opponentDeck; }
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  channel.postMessage({ type: 'data-updated' });
+  render();
+}
+
+function renderStatus() {
+  var lu = data && data.lastUpdate;
+  var dot = byId('stDot'), tx = byId('stText'), tm = byId('stTime');
+  if (lu) {
+    var d = new Date(lu);
+    tm.textContent = '· ' + (d.getMonth()+1)+'/'+d.getDate()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+    var fresh = Date.now() - d.getTime() < 10*60*1000;
+    dot.className = fresh ? 'p-status-dot' : 'p-status-dot stale';
+    tx.textContent = fresh ? '已同步' : '数据较旧';
+  } else { dot.className = 'p-status-dot stale'; tx.textContent = '暂无数据'; tm.textContent = ''; }
+}
+
+byId('deckSel').addEventListener('change', function() {
+  if (!data || !data.personal) return;
+  var nid = this.value;
+  if (!nid || nid === data.personal.currentDeckId) return;
+  var p = data.personal;
+  var old = p.decks[p.currentDeckId];
+  if (old && p.lastApiWins !== undefined) {
+    var dw = p.lastApiWins - (old.snapshotWins||0), dl = p.lastApiLosses - (old.snapshotLosses||0);
+    if (dw>0||dl>0) { old.accumulatedWins=(old.accumulatedWins||0)+Math.max(0,dw); old.accumulatedLosses=(old.accumulatedLosses||0)+Math.max(0,dl); }
+  }
+  p.currentDeckId = nid;
+  var nd = p.decks[nid];
+  if (nd) { nd.snapshotWins = p.lastApiWins||0; nd.snapshotLosses = p.lastApiLosses||0; }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  channel.postMessage({ type: 'deck-changed', deckId: nid });
+  render();
+});
+
+window.addEventListener('storage', function(e) { if (e.key===STORAGE_KEY) { loadData(); render(); } });
+channel.addEventListener('message', function(e) {
+  if (e.data && (e.data.type==='data-updated'||e.data.type==='deck-changed')) { loadData(); render(); }
+});
+
+function requestRefresh() {
+  channel.postMessage({ type: 'refresh-request' });
+  byId('stText').textContent = '刷新中...';
+  setTimeout(function() { loadData(); render(); }, 3000);
+}
+
+// Heartbeat
+var hb = null;
+channel.addEventListener('message', function(e) {
+  if (e.data && e.data.type==='heartbeat') {
+    clearTimeout(hb);
+    hb = setTimeout(function() { byId('stText').textContent='主页已关闭'; byId('stDot').className='p-status-dot stale'; }, 5000);
+  }
+  if (e.data && e.data.type==='theme-changed') applyTheme(e.data.theme);
+});
+
+// Theme
+var TK = 'ptcg-theme';
+function getTheme() { return localStorage.getItem(TK) || 'light'; }
+function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); }
+window.addEventListener('storage', function(e) { if (e.key===TK) applyTheme(e.newValue||'light'); });
+applyTheme(getTheme());
+loadData();
+render();
+</script>
+</body>
+</html>

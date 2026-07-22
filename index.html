@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PTCG 玩家追踪器</title>
+  <meta name="description" content="宝可梦卡牌小天冠山排位赛玩家数据追踪工具">
+  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+  <div class="app">
+    <!-- 头部 -->
+    <header class="header">
+      <div class="header-left">
+        <h1 class="logo">
+          <span class="logo-icon">⚡</span>
+          PTCG 玩家追踪器
+        </h1>
+        <p class="subtitle">小天冠山排位赛 · 玩家数据监控</p>
+      </div>
+      <div class="header-right">
+        <div class="update-info">
+          <span class="update-label">上次更新</span>
+          <span id="lastUpdate" class="update-time">尚未更新</span>
+        </div>
+        <button id="exportBtn2" class="btn btn-ghost" title="导出全部数据">
+          <span class="btn-icon">📥</span>
+          <span class="btn-text">导出</span>
+        </button>
+        <button id="importBtn2" class="btn btn-ghost" title="导入数据">
+          <span class="btn-icon">📤</span>
+          <span class="btn-text">导入</span>
+        </button>
+        <button id="popupBtn" class="btn btn-popup" title="打开战绩悬浮窗">
+          <span class="btn-icon">🪟</span>
+          <span class="btn-text">悬浮窗</span>
+        </button>
+        <button id="themeBtn" class="btn-theme" title="切换主题">🌓</button>
+        <button id="refreshBtn" class="btn btn-primary">
+          <span class="btn-icon">🔄</span>
+          <span class="btn-text">更新数据</span>
+        </button>
+        <button id="menuBtn" class="btn btn-ghost" title="更多操作">
+          <span class="btn-icon">⋮</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 下拉菜单 -->
+    <div id="menuDropdown" class="menu-dropdown" style="display:none;">
+      <button class="menu-item" id="autoRefreshToggle">
+        <span>⏱ 自动刷新</span>
+        <span class="menu-badge" id="autoRefreshStatus">关</span>
+      </button>
+      <button class="menu-item" id="exportBtn">
+        <span>📥 导出数据</span>
+      </button>
+      <button class="menu-item" id="importBtn">
+        <span>📤 导入数据</span>
+      </button>
+      <button class="menu-item" id="clearBtn">
+        <span>🗑 清空所有数据</span>
+      </button>
+    </div>
+
+    <!-- 第一大模块：个人战绩 / 卡组 / 对局历史 -->
+    <h2 class="module-title">📊 个人战绩</h2>
+    <section class="personal-section" id="personalSection">
+      <div class="personal-card">
+        <h2 class="section-title">🃏 个人战绩</h2>
+        <p class="section-desc">设置你的游戏昵称，创建卡组，系统自动从小天冠山 API 获取战绩并按卡组时间段分配</p>
+
+        <!-- 第一步：设置玩家昵称 -->
+        <div class="personal-setup">
+          <label class="setup-label">你的游戏昵称</label>
+          <div class="setup-input-group">
+            <input type="text" id="personalPlayerInput" class="setup-input" placeholder="输入你的 PTCG 游戏昵称..." maxlength="50">
+            <button id="personalSetPlayerBtn" class="btn btn-add">确认</button>
+          </div>
+          <div id="personalSetupMsg" class="add-result"></div>
+        </div>
+
+        <!-- API 总体数据 -->
+        <div id="personalApiOverview" class="personal-api-overview" style="display:none;">
+          <div class="api-stat"><span class="api-stat-label">排名</span><span class="api-stat-value" id="apiRank">--</span></div>
+          <div class="api-stat"><span class="api-stat-label">积分</span><span class="api-stat-value" id="apiExp">--</span></div>
+          <div class="api-stat"><span class="api-stat-label">总胜场</span><span class="api-stat-value win" id="apiTotalWin">--</span></div>
+          <div class="api-stat"><span class="api-stat-label">总败场</span><span class="api-stat-value lose" id="apiTotalLose">--</span></div>
+          <div class="api-stat"><span class="api-stat-label">总胜率</span><span class="api-stat-value" id="apiWinRate">--</span></div>
+          <div class="api-stat"><span class="api-stat-label">总场数</span><span class="api-stat-value" id="apiTotalGames">--</span></div>
+          <button id="personalRefreshApiBtn" class="btn btn-sm btn-ghost" title="刷新 API 数据">🔄 刷新</button>
+        </div>
+      </div>
+
+      <!-- 第二步：卡组管理 + 战绩获取 -->
+      <div id="personalDeckPanel" class="personal-deck-panel" style="display:none;">
+        <!-- 当前卡组选择器 -->
+        <div class="deck-current-section">
+          <div class="deck-selector-row">
+            <label class="deck-selector-label">当前卡组</label>
+            <select id="deckSelector" class="deck-select"></select>
+            <button id="manageDecksBtn" class="btn btn-sm btn-ghost">⚙ 管理</button>
+          </div>
+
+          <!-- 当前卡组战绩 -->
+          <div class="deck-stats" id="deckStats">
+            <div class="deck-stat-item">
+              <span class="deck-stat-num win" id="deckWins">0</span>
+              <span class="deck-stat-label">胜场</span>
+            </div>
+            <div class="deck-stat-divider"></div>
+            <div class="deck-stat-item">
+              <span class="deck-stat-num lose" id="deckLosses">0</span>
+              <span class="deck-stat-label">败场</span>
+            </div>
+            <div class="deck-stat-divider"></div>
+            <div class="deck-stat-item">
+              <span class="deck-stat-num" id="deckTotal">0</span>
+              <span class="deck-stat-label">总场数</span>
+            </div>
+            <div class="deck-stat-divider"></div>
+            <div class="deck-stat-item">
+              <span class="deck-stat-num" id="deckWinRate">--</span>
+              <span class="deck-stat-label">胜率</span>
+            </div>
+          </div>
+
+          <!-- 对阵分析 -->
+          <div id="matchupAnalysis" class="matchup-section" style="display:none;">
+            <div class="matchup-header">📊 对阵分析</div>
+            <div class="matchup-table-wrap">
+              <table class="matchup-table">
+                <thead>
+                  <tr>
+                    <th>对手卡组</th>
+                    <th>总场数</th>
+                    <th>胜场</th>
+                    <th>负场</th>
+                    <th>胜率</th>
+                  </tr>
+                </thead>
+                <tbody id="matchupTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 获取数据按钮 -->
+          <div class="deck-record-row">
+            <button id="personalFetchBtn" class="btn btn-fetch-data">🔄 获取战绩（API差分）</button>
+            <span class="deck-record-hint">切换卡组后点击获取，自动将差额分配给当前卡组</span>
+          </div>
+        </div>
+
+        <!-- 卡组管理面板（默认隐藏） -->
+        <div id="deckManagePanel" class="deck-manage-panel" style="display:none;">
+          <div class="deck-manage-header">
+            <h3>卡组管理</h3>
+            <button id="closeDeckManageBtn" class="btn btn-sm btn-ghost">✕ 返回</button>
+          </div>
+          <div class="deck-manage-add">
+            <input type="text" id="newDeckInput" class="deck-name-input" placeholder="输入卡组名称..." maxlength="30">
+            <button id="addDeckBtn" class="btn btn-add">＋ 新建</button>
+          </div>
+          <div id="deckList" class="deck-list"></div>
+        </div>
+
+        <!-- 卡组列表管理（对手卡组图鉴） -->
+        <div id="deckListManagePanel" class="deck-list-manage-panel">
+          <div class="deck-list-manage-header">
+            <h3>📚 卡组图鉴</h3>
+            <span style="font-size:12px;color:var(--text-muted);">管理对手卡组列表，对局记录下拉选项</span>
+          </div>
+          <div class="deck-list-manage-add">
+            <input type="text" id="newDeckListInput" class="deck-list-name-input" placeholder="输入对手卡组名称..." maxlength="30">
+            <div class="pokemon-icon-picker">
+              <span class="pokemon-icon-label">图标(0-2):</span>
+              <div class="pokemon-icon-grid" id="deckListIconPicker"></div>
+            </div>
+            <button id="addDeckListBtn" class="btn btn-add">＋ 添加</button>
+          </div>
+          <div id="deckListSelectedIcons" style="font-size:13px;color:var(--text-dim);margin-bottom:8px;min-height:20px;"></div>
+          <div id="deckListEntries" class="deck-list-entries"></div>
+        </div>
+      </div>
+
+      <!-- 第三步：对局历史 -->
+      <div id="personalHistory" class="personal-history" style="display:none;">
+        <div class="personal-card">
+          <div class="history-header">
+            <h3>📜 对局历史</h3>
+            <div class="history-actions">
+              <button id="exportAllBtn" class="btn btn-sm btn-ghost" title="导出全部数据（含好友、卡组、历史）">📥 导出全部数据</button>
+              <button id="exportHistoryBtn" class="btn btn-sm btn-ghost">📋 导出对局CSV</button>
+              <button id="importAllBtn" class="btn btn-sm btn-ghost" title="从文件恢复全部数据">📤 导入数据</button>
+              <button id="clearHistoryBtn" class="btn btn-sm btn-ghost">清空历史</button>
+            </div>
+          </div>
+          <div id="historyList" class="history-list"></div>
+          <div id="historyEmpty" class="empty-state" style="padding:30px;">
+            <div class="empty-icon">📝</div>
+            <p class="empty-text">暂无对局记录</p>
+            <p class="empty-hint">选中卡组后点击"获取战绩"，差分数据将自动记录</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 第二大模块：添加关注玩家 -->
+    <h2 class="module-title">👥 好友战绩</h2>
+    <section class="add-section">
+      <div class="add-card">
+        <h2 class="section-title">添加关注玩家</h2>
+        <p class="section-desc">输入游戏昵称，多个玩家用逗号或换行分隔，可一次性添加多个</p>
+        <div class="add-input-group">
+          <textarea id="playerInput" class="add-input" placeholder="例如：zfxdsi44891, GoodbyeSSY, KYD_Sunny&#10;或每行一个昵称" rows="2"></textarea>
+          <button id="addBtn" class="btn btn-add">添加</button>
+        </div>
+        <div id="addResult" class="add-result"></div>
+      </div>
+    </section>
+
+    <!-- 统计卡片 -->
+    <section class="stats-section" id="statsSection" style="display:none;">
+      <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <div class="stat-value" id="statTotal">0</div>
+        <div class="stat-label">关注玩家</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-value" id="statAvgWinRate">--</div>
+        <div class="stat-label">平均胜率</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🏆</div>
+        <div class="stat-value" id="statTotalWins">0</div>
+        <div class="stat-label">总胜场</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">💀</div>
+        <div class="stat-value" id="statTotalLosses">0</div>
+        <div class="stat-label">总败场</div>
+      </div>
+    </section>
+
+    <!-- 玩家列表 -->
+    <section class="table-section">
+      <div class="table-header">
+        <h2 class="section-title">关注列表</h2>
+        <div class="table-controls">
+          <input type="search" id="searchInput" class="search-input" placeholder="搜索玩家..." />
+          <select id="sortBy" class="sort-select">
+            <option value="exp">按积分排序</option>
+            <option value="winRate">按胜率排序</option>
+            <option value="winTotal">按胜场排序</option>
+            <option value="rank">按排名排序</option>
+            <option value="name">按昵称排序</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 空状态 -->
+      <div id="emptyState" class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p class="empty-text">还没有关注的玩家</p>
+        <p class="empty-hint">在上方输入游戏昵称添加关注</p>
+      </div>
+
+      <!-- 表格 -->
+      <div id="tableContainer" class="table-container" style="display:none;">
+        <table class="player-table">
+          <thead>
+            <tr>
+              <th class="col-rank">排名</th>
+              <th class="col-name">游戏昵称</th>
+              <th class="col-note">备注</th>
+              <th class="col-exp">积分</th>
+              <th class="col-win">胜场</th>
+              <th class="col-lose">败场</th>
+              <th class="col-rate">胜率</th>
+              <th class="col-games">总场数</th>
+              <th class="col-streak">连胜/连败</th>
+              <th class="col-action">操作</th>
+            </tr>
+          </thead>
+          <tbody id="playerTableBody">
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 底部 -->
+    <footer class="footer">
+      <p class="footer-text">数据来源：<a href="https://ptcg.mivm.cn/rank.html" target="_blank" rel="noopener">小天冠山排位赛</a> · 排行榜每十分钟更新一次 · 数据保存在本地浏览器</p>
+      <img src="malo-tcg-logo.png" alt="MALO-TCG" class="malo-logo">
+    </footer>
+  </div>
+
+  <!-- 加载遮罩 -->
+  <div id="loadingOverlay" class="loading-overlay" style="display:none;">
+    <div class="loading-spinner"></div>
+    <p class="loading-text" id="loadingText">正在更新数据...</p>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" style="display:none;"></div>
+
+  <!-- 导入文件 -->
+  <input type="file" id="importFile" accept=".json" style="display:none;">
+
+  <script src="app.js"></script>
+</body>
+</html>
