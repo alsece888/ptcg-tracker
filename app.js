@@ -2188,13 +2188,17 @@ refreshApiOverview = async function () {
 
 const NEW_DOMAIN = 'malo-ptcg.cn';
 
-// 新域名：检测 URL hash 中的迁移数据并自动导入
+// 新域名：检测 URL hash / query 中的迁移数据并自动导入
 function checkAndImportMigrationData() {
-  const hash = window.location.hash;
-  if (!hash || !hash.startsWith('#migrate=')) return false;
+  // Check both hash and query params (recovery page uses ?migrate=)
+  const params = new URLSearchParams(window.location.search);
+  const hashMigrate = window.location.hash;
+  const hashData = hashMigrate && hashMigrate.startsWith('#migrate=') ? hashMigrate.substring(9) : null;
+  const queryData = params.get('migrate');
+  const encoded = queryData || hashData;
+  if (!encoded) return false;
 
   try {
-    const encoded = hash.substring(9);
     const jsonStr = decodeURIComponent(atob(encoded));
     const data = JSON.parse(jsonStr);
 
@@ -2208,8 +2212,11 @@ function checkAndImportMigrationData() {
     if (!state.personal.deckList) state.personal.deckList = [];
     saveData();
 
-    // 清除 hash，避免刷新时重复导入
-    history.replaceState(null, '', window.location.pathname + window.location.search);
+    // 清除 migrate 参数，避免刷新时重复导入
+    var url = new URL(window.location.href);
+    url.searchParams.delete('migrate');
+    url.hash = '';
+    history.replaceState(null, '', url.toString());
 
     showToast('数据迁移成功！欢迎使用新域名', 'success');
     return true;
@@ -2220,10 +2227,33 @@ function checkAndImportMigrationData() {
   }
 }
 
+// 旧域名：postMessage 导出模式（由新域名弹窗触发）
+function handleLegacyExport() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    if (window.opener) {
+      window.opener.postMessage({ type: 'ptcg-legacy-import', success: false, error: '旧域名没有找到数据，请确认旧域名中是否有使用记录' }, '*');
+    }
+    setTimeout(function() { window.close(); }, 1000);
+    return;
+  }
+  if (window.opener) {
+    window.opener.postMessage({ type: 'ptcg-legacy-import', success: true, data: raw }, '*');
+  }
+  setTimeout(function() { window.close(); }, 500);
+}
+
 // 旧域名：检测是否有数据需要迁移，显示迁移横幅
 function checkDomainMigration() {
   const currentHost = window.location.hostname;
   if (currentHost === NEW_DOMAIN || currentHost === 'www.' + NEW_DOMAIN) return;
+
+  // 检查是否是 postMessage 导出模式
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('mode') === 'export') {
+    handleLegacyExport();
+    return;
+  }
 
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return;
@@ -2267,10 +2297,77 @@ function performMigration() {
 }
 
 // ============================================================
+// 新域名：一键从旧域名导入数据（postMessage 方式）
+// ============================================================
+
+function startLegacyImport() {
+  var w = 480, h = 280;
+  var left = (screen.width - w) / 2;
+  var top = (screen.height - h) / 2;
+  var win = window.open(
+    'https://alsece888.github.io/ptcg-tracker/?mode=export',
+    'ptcg-legacy-import',
+    'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top
+  );
+  if (!win) {
+    showToast('请允许浏览器弹出窗口以完成数据导入', 'error');
+    return;
+  }
+  showToast('正在从旧域名读取数据...', 'info');
+}
+
+function setupLegacyImport() {
+  var host = window.location.hostname;
+  if (host !== NEW_DOMAIN && host !== 'www.' + NEW_DOMAIN) return;
+
+  // 监听来自旧域名的 postMessage
+  window.addEventListener('message', function(event) {
+    if (!event.data || event.data.type !== 'ptcg-legacy-import') return;
+    if (event.data.success && event.data.data) {
+      try {
+        var data = JSON.parse(event.data.data);
+        state = {
+          watchlist: data.watchlist || [],
+          lastUpdate: data.lastUpdate || null,
+          players: data.players || {},
+          notes: data.notes || {},
+          personal: data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] },
+        };
+        if (!state.personal.deckList) state.personal.deckList = [];
+        saveData();
+        showToast('数据导入成功！', 'success');
+        setTimeout(function() { location.reload(); }, 800);
+      } catch (e) {
+        showToast('数据格式错误，导入失败', 'error');
+      }
+    } else {
+      showToast(event.data.error || '导入失败', 'error');
+    }
+  });
+
+  // 动态添加"从旧版导入"按钮到头部
+  var headerRight = document.querySelector('.header-right');
+  if (!headerRight) return;
+  var importBtn = document.createElement('button');
+  importBtn.id = 'legacyImportBtn';
+  importBtn.className = 'btn btn-legacy';
+  importBtn.title = '从旧域名导入历史数据';
+  importBtn.innerHTML = '<span class="btn-icon">📥</span><span class="btn-text">导入旧数据</span>';
+  importBtn.addEventListener('click', startLegacyImport);
+  // 插入到菜单按钮之前
+  var menuBtn = document.getElementById('menuBtn');
+  if (menuBtn) {
+    headerRight.insertBefore(importBtn, menuBtn);
+  } else {
+    headerRight.appendChild(importBtn);
+  }
+}
+
+// ============================================================
 // 初始化
 // ============================================================
 
-// 新域名优先检测迁移数据
+// 新域名优先检测迁移数据（URL hash / query 方式）
 checkAndImportMigrationData();
 
 loadData();
@@ -2279,3 +2376,6 @@ renderPersonalSection();
 
 // 旧域名检测迁移横幅
 checkDomainMigration();
+
+// 新域名设置一键导入
+setupLegacyImport();

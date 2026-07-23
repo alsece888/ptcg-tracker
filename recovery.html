@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PTCG 数据迁移工具</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    background: #1e293b;
+    border-radius: 16px;
+    padding: 40px;
+    max-width: 520px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  h1 { font-size: 24px; margin-bottom: 8px; }
+  .sub { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
+  .status {
+    padding: 16px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    font-size: 15px;
+  }
+  .status.success { background: #14532d; color: #86efac; }
+  .status.error { background: #450a0a; color: #fca5a5; }
+  .status.info { background: #1e3a5f; color: #93c5fd; }
+  .data-block {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 12px;
+    word-break: break-all;
+    text-align: left;
+    max-height: 200px;
+    overflow-y: auto;
+    color: #94a3b8;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .btn {
+    display: inline-block;
+    padding: 12px 28px;
+    border-radius: 8px;
+    border: none;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    margin: 6px;
+  }
+  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-green { background: #16a34a; color: #fff; }
+  .btn-green:hover { background: #15803d; }
+  .btn-outline { background: transparent; border: 1px solid #475569; color: #cbd5e1; }
+  .btn-outline:hover { background: #1e293b; }
+  .hide { display: none; }
+  .tip {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #1e293b;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔧 PTCG 数据迁移</h1>
+  <p class="sub">将旧域名数据迁移到 malo-ptcg.cn</p>
+
+  <div id="msgBox"></div>
+
+  <div id="actions" class="hide">
+    <button class="btn btn-green" onclick="migrateToNew()">🚀 一键迁移到新域名</button>
+    <br>
+    <button class="btn btn-outline" onclick="showRaw()">📋 查看原始数据</button>
+  </div>
+
+  <div id="rawBlock" class="data-block"></div>
+
+  <div id="manualImport" class="hide">
+    <p style="margin-bottom:10px;color:#94a3b8;font-size:14px;">如果一键迁移失败，请复制下方数据：</p>
+    <textarea id="manualData" style="width:100%;height:120px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:8px;padding:8px;font-family:monospace;font-size:12px;resize:vertical;"></textarea>
+    <p style="margin-top:8px;font-size:13px;color:#64748b;">
+      1. 复制上方数据 → 2. 打开 <a href="https://malo-ptcg.cn" style="color:#3b82f6;">malo-ptcg.cn</a> → 3. 点击「📥 导入数据」粘贴即可
+    </p>
+  </div>
+
+  <p class="tip" id="tipText">
+    请从旧网址 <code style="color:#3b82f6;">alsece888.github.io/ptcg-tracker/</code> 访问此页面<br>
+    如果你被自动跳转了，请关闭此页，用无痕窗口打开旧网址，<br>
+    然后点击页面上的「立即迁移」按钮。
+  </p>
+</div>
+
+<script>
+var STORAGE_KEY = 'ptcg-tracker-data';
+var MIGRATE_KEY = '__ptcg_migrated_v1';
+var NEW_DOMAIN = 'https://malo-ptcg.cn';
+
+function showMsg(text, type) {
+  var box = document.getElementById('msgBox');
+  box.innerHTML = '<div class="status ' + type + '">' + text + '</div>';
+}
+
+function showActions() {
+  document.getElementById('actions').classList.remove('hide');
+  document.getElementById('tipText').classList.add('hide');
+}
+
+function showRaw() {
+  var raw = localStorage.getItem(STORAGE_KEY);
+  var block = document.getElementById('rawBlock');
+  if (raw) {
+    block.style.display = 'block';
+    block.textContent = raw;
+  }
+}
+
+function migrateToNew() {
+  var raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    showMsg('未找到数据，请确保从旧网址访问此页面', 'error');
+    return;
+  }
+  try {
+    // Encode to base64 for URL safety
+    var encoded = btoa(unescape(encodeURIComponent(raw)));
+    // If too long, fall back to manual
+    if (encoded.length > 8000) {
+      showMsg('数据较大，请使用下方手动导入', 'info');
+      document.getElementById('manualImport').classList.remove('hide');
+      document.getElementById('manualData').value = raw;
+      return;
+    }
+    window.location.href = NEW_DOMAIN + '/?migrate=' + encoded;
+  } catch(e) {
+    showMsg('数据编码失败，请使用下方手动导入', 'info');
+    document.getElementById('manualImport').classList.remove('hide');
+    document.getElementById('manualData').value = raw;
+  }
+}
+
+// Check if we're on the old domain
+var host = window.location.hostname;
+var isOldDomain = host.indexOf('alsece888.github.io') >= 0;
+
+if (!isOldDomain) {
+  showMsg('⚠️ 请从旧域名 <code>alsece888.github.io/ptcg-tracker/recovery.html</code> 打开此页面才能读取旧数据。<br><br>如果你被自动跳转到新域名，请使用无痕/隐私窗口打开旧域名。', 'error');
+} else {
+  var data = localStorage.getItem(STORAGE_KEY);
+  if (data) {
+    try {
+      var parsed = JSON.parse(data);
+      var deckCount = (parsed.deckList || []).length;
+      var matchCount = (parsed.matchHistory || []).length;
+      showMsg('✅ 找到数据：' + deckCount + ' 个卡组，' + matchCount + ' 条对局记录', 'success');
+      showActions();
+    } catch(e) {
+      showMsg('⚠️ 数据格式异常，请尝试手动导出', 'error');
+      document.getElementById('manualImport').classList.remove('hide');
+      document.getElementById('manualData').value = data;
+    }
+  } else {
+    showMsg('未找到数据。<br><br>请确保你从旧网站 <code>alsece888.github.io/ptcg-tracker/</code> 访问此页面。<br>如果你直接在浏览器打开这个文件，localStorage 是空的。', 'info');
+  }
+}
+</script>
+</body>
+</html>

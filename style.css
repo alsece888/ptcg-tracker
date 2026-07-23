@@ -191,6 +191,20 @@ body {
   box-shadow: 0 4px 14px rgba(12,175,123,0.3);
 }
 
+.btn-legacy {
+  background: var(--bg-input);
+  color: #f0a030;
+  padding: 10px 14px;
+  border: 1px solid #f0a030;
+  font-weight: 600;
+}
+.btn-legacy:hover {
+  background: #f0a030;
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(240,160,48,0.3);
+}
+
 .btn-theme {
   width: 38px; height: 38px;
   border: 1px solid var(--border);
