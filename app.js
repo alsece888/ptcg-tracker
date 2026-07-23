@@ -1539,6 +1539,8 @@ function renderHistory() {
     const d = new Date(h.time);
     const timeStr = `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     const opponentDeck = h.opponentDeck || '';
+    const resultClass = h.deltaWins > 0 ? 'win' : (h.deltaLosses > 0 ? 'loss' : '');
+    const resultText = h.deltaWins > 0 ? '胜' : (h.deltaLosses > 0 ? '负' : '-');
 
     // 下拉选项（select 不支持图片，仅显示名称）
     const selectOptions = deckList.map(dl => {
@@ -1546,13 +1548,16 @@ function renderHistory() {
       return `<option value="${esc(dl.name)}"${sel}>${esc(dl.name)}</option>`;
     }).join('');
 
+    const turnHtml = renderHistoryTurn(h.id, h.firstMove);
+
     // 编辑模式
     if (editingHistoryId === h.id) {
       return `<div class="history-item history-item-editing">
         <div class="history-left">
           <span class="history-deck-name">${esc(h.deckName)}</span>
-          <span class="history-delta">+${h.deltaWins || 0}胜 +${h.deltaLosses || 0}败</span>
-          <span class="history-cumulative">→ 累计 ${h.cumulativeWins || 0}胜 ${h.cumulativeLosses || 0}败</span>
+          <span class="history-turn">${turnHtml}</span>
+          <span class="history-result ${resultClass}">${resultText}</span>
+          <span class="history-cumulative">累计 ${h.cumulativeWins || 0}胜 ${h.cumulativeLosses || 0}败</span>
           <span class="history-time">${timeStr}</span>
         </div>
         <div class="history-right">
@@ -1576,8 +1581,9 @@ function renderHistory() {
     return `<div class="history-item">
       <div class="history-left">
         <span class="history-deck-name">${esc(h.deckName)}</span>
-        <span class="history-delta">+${h.deltaWins || 0}胜 +${h.deltaLosses || 0}败</span>
-        <span class="history-cumulative">→ 累计 ${h.cumulativeWins || 0}胜 ${h.cumulativeLosses || 0}败</span>
+        <span class="history-turn">${turnHtml}</span>
+        <span class="history-result ${resultClass}">${resultText}</span>
+        <span class="history-cumulative">累计 ${h.cumulativeWins || 0}胜 ${h.cumulativeLosses || 0}败</span>
         <span class="history-time">${timeStr}</span>
       </div>
       <div class="history-right">
@@ -1585,6 +1591,43 @@ function renderHistory() {
       </div>
     </div>`;
   }).join('');
+}
+
+function renderHistoryTurn(id, firstMove) {
+  const isEditing = editingHistoryId === id;
+  if (isEditing) {
+    return `
+      <button class="btn-turn ${firstMove === 'first' ? 'active' : 'gray'}" onclick="saveHistoryTurn('${esc(id)}', 'first')">先</button>
+      <button class="btn-turn ${firstMove === 'second' ? 'active' : 'gray'}" onclick="saveHistoryTurn('${esc(id)}', 'second')">后</button>
+    `;
+  }
+  if (firstMove === 'first') {
+    return `<button class="btn-turn active" onclick="editHistoryTurn('${esc(id)}')">先</button>`;
+  }
+  if (firstMove === 'second') {
+    return `<button class="btn-turn active second" onclick="editHistoryTurn('${esc(id)}')">后</button>`;
+  }
+  return `
+    <button class="btn-turn" onclick="saveHistoryTurn('${esc(id)}', 'first')">先</button>
+    <button class="btn-turn second" onclick="saveHistoryTurn('${esc(id)}', 'second')">后</button>
+  `;
+}
+
+function editHistoryTurn(id) {
+  editingHistoryId = id;
+  renderHistory();
+}
+
+function saveHistoryTurn(id, turn) {
+  const history = state.personal.matchHistory || [];
+  const entry = history.find(h => h.id === id);
+  if (entry) {
+    entry.firstMove = turn;
+    saveData();
+    showToast('先后手已保存', 'success');
+  }
+  editingHistoryId = null;
+  renderHistory();
 }
 
 function editHistoryOpponent(id) {
@@ -1628,10 +1671,11 @@ function exportHistory() {
     return;
   }
 
-  const headers = ['时间', '使用卡组', '胜场增量', '败场增量', '累计胜场', '累计败场', '对手卡组'];
+  const headers = ['时间', '使用卡组', '胜场增量', '败场增量', '累计胜场', '累计败场', '对手卡组', '先后手'];
   const rows = history.map(h => {
     const d = new Date(h.time);
     const timeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    const turnMap = { first: '先攻', second: '后攻' };
     return [
       timeStr,
       h.deckName || '',
@@ -1640,6 +1684,7 @@ function exportHistory() {
       h.cumulativeWins || 0,
       h.cumulativeLosses || 0,
       h.opponentDeck || '',
+      turnMap[h.firstMove] || '',
     ];
   });
 

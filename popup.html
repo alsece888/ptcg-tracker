@@ -347,6 +347,34 @@ body {
 .hist-delta { font-size: 11px; font-family: var(--mono); white-space: nowrap; display: flex; gap: 3px; }
 .hist-delta .dw { color: var(--accent); font-weight: 700; }
 .hist-delta .dl { color: var(--danger); font-weight: 700; }
+.hist-turn { display: inline-flex; gap: 2px; align-items: center; }
+.hist-btn-turn {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.hist-btn-turn:hover { border-color: var(--accent); color: var(--accent); }
+.hist-btn-turn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.hist-btn-turn.active.second {
+  background: var(--info);
+  border-color: var(--info);
+}
+.hist-btn-turn.gray {
+  background: var(--bg-input);
+  color: var(--text-3);
+  border-color: var(--border);
+}
+.hist-btn-turn.gray:hover { border-color: var(--accent); color: var(--accent); }
 .hist-sep { color: var(--text-3); }
 .hist-opp {
   font-size: 10px;
@@ -657,8 +685,44 @@ function renderHistory() {
       oppHtml = '<span class="hist-opp-placeholder" data-id="'+esc(x.id)+'">+ 对手</span>';
     }
 
-    return '<div class="hist-item"><div class="hist-left"><span class="hist-deck-dot '+dc+'"></span><span class="hist-deck-name" title="'+esc(x.deckName||'')+'">'+esc(x.deckName||'')+'</span><span class="hist-delta">'+delta+'</span>'+oppHtml+'</div><span class="hist-time">'+ts+'</span></div>';
+    var turnHtml = renderPopTurn(x.id, x.firstMove);
+
+    return '<div class="hist-item"><div class="hist-left"><span class="hist-deck-dot '+dc+'"></span><span class="hist-deck-name" title="'+esc(x.deckName||'')+'">'+esc(x.deckName||'')+'</span><span class="hist-turn">'+turnHtml+'</span><span class="hist-delta">'+delta+'</span>'+oppHtml+'</div><span class="hist-time">'+ts+'</span></div>';
   }).join('');
+}
+
+function renderPopTurn(id, firstMove) {
+  var editing = data.personal.matchHistory.find(function(h){ return h.id===id && h._editingTurn; });
+  if (editing) {
+    return '<button class="hist-btn-turn '+ (firstMove==='first'?'active':'gray') +'" data-turn-id="'+esc(id)+'" data-turn="first">先</button>'+
+           '<button class="hist-btn-turn '+ (firstMove==='second'?'active second':'gray') +'" data-turn-id="'+esc(id)+'" data-turn="second">后</button>';
+  }
+  if (firstMove === 'first') {
+    return '<button class="hist-btn-turn active" data-turn-id="'+esc(id)+'">先</button>';
+  }
+  if (firstMove === 'second') {
+    return '<button class="hist-btn-turn active second" data-turn-id="'+esc(id)+'">后</button>';
+  }
+  return '<button class="hist-btn-turn" data-turn-id="'+esc(id)+'" data-turn="first">先</button>'+
+         '<button class="hist-btn-turn second" data-turn-id="'+esc(id)+'" data-turn="second">后</button>';
+}
+
+function editPopTurn(id) {
+  if (!data || !data.personal || !data.personal.matchHistory) return;
+  data.personal.matchHistory.forEach(function(h) { delete h._editingTurn; });
+  var entry = data.personal.matchHistory.find(function(h){ return h.id===id; });
+  if (entry) entry._editingTurn = true;
+  render();
+}
+
+function savePopTurn(id, turn) {
+  if (!data || !data.personal || !data.personal.matchHistory) return;
+  data.personal.matchHistory.forEach(function(h) { delete h._editingTurn; });
+  var entry = data.personal.matchHistory.find(function(h){ return h.id===id; });
+  if (entry) entry.firstMove = turn;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  channel.postMessage({ type: 'data-updated' });
+  render();
 }
 
 function editPopOpp(id) {
@@ -749,7 +813,7 @@ var TK = 'ptcg-theme';
 function getTheme() { return localStorage.getItem(TK) || 'light'; }
 function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); }
 window.addEventListener('storage', function(e) { if (e.key===TK) applyTheme(e.newValue||'light'); });
-// 对局历史事件委托：点击对手进入编辑，选择下拉框自动保存，点击取消退出
+// 对局历史事件委托：点击对手进入编辑，选择下拉框自动保存，点击取消退出，点击先后手编辑/保存
 byId('historyList').addEventListener('click', function(e) {
   var target = e.target;
   var oppEl = target.closest('.hist-opp, .hist-opp-placeholder');
@@ -762,6 +826,19 @@ byId('historyList').addEventListener('click', function(e) {
   if (cancelEl) {
     e.stopPropagation();
     cancelPopOpp();
+    return;
+  }
+  var turnEl = target.closest('.hist-btn-turn');
+  if (turnEl) {
+    e.stopPropagation();
+    var id = turnEl.getAttribute('data-turn-id');
+    var turn = turnEl.getAttribute('data-turn');
+    if (!id) return;
+    if (turn) {
+      savePopTurn(id, turn);
+    } else {
+      editPopTurn(id);
+    }
     return;
   }
 });
