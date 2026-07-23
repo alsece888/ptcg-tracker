@@ -2183,9 +2183,99 @@ refreshApiOverview = async function () {
 };
 
 // ============================================================
+// 域名迁移：旧域名 → malo-ptcg.cn 自动迁移用户数据
+// ============================================================
+
+const NEW_DOMAIN = 'malo-ptcg.cn';
+
+// 新域名：检测 URL hash 中的迁移数据并自动导入
+function checkAndImportMigrationData() {
+  const hash = window.location.hash;
+  if (!hash || !hash.startsWith('#migrate=')) return false;
+
+  try {
+    const encoded = hash.substring(9);
+    const jsonStr = decodeURIComponent(atob(encoded));
+    const data = JSON.parse(jsonStr);
+
+    state = {
+      watchlist: data.watchlist || [],
+      lastUpdate: data.lastUpdate || null,
+      players: data.players || {},
+      notes: data.notes || {},
+      personal: data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] },
+    };
+    if (!state.personal.deckList) state.personal.deckList = [];
+    saveData();
+
+    // 清除 hash，避免刷新时重复导入
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+
+    showToast('数据迁移成功！欢迎使用新域名', 'success');
+    return true;
+  } catch (e) {
+    console.error('迁移数据导入失败:', e);
+    showToast('自动迁移失败，请使用导出/导入功能手动迁移', 'error');
+    return false;
+  }
+}
+
+// 旧域名：检测是否有数据需要迁移，显示迁移横幅
+function checkDomainMigration() {
+  const currentHost = window.location.hostname;
+  if (currentHost === NEW_DOMAIN || currentHost === 'www.' + NEW_DOMAIN) return;
+
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+
+  const dismissed = localStorage.getItem('ptcg-migration-dismissed');
+  if (dismissed === '1') return;
+
+  showMigrationBanner();
+}
+
+function showMigrationBanner() {
+  if (document.getElementById('migrationBanner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'migrationBanner';
+  banner.innerHTML = `
+    <span class="mb-text">🎉 网站已迁移到 <strong>malo-ptcg.cn</strong>，点击一键迁移你的数据</span>
+    <span class="mb-actions">
+      <button id="migrateBtn" class="mb-btn-primary">立即迁移</button>
+      <button id="dismissMigrateBtn" class="mb-btn-dismiss">稍后</button>
+    </span>
+  `;
+  document.body.prepend(banner);
+
+  document.getElementById('migrateBtn').addEventListener('click', performMigration);
+  document.getElementById('dismissMigrateBtn').addEventListener('click', () => {
+    localStorage.setItem('ptcg-migration-dismissed', '1');
+    banner.remove();
+  });
+}
+
+function performMigration() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const encoded = btoa(encodeURIComponent(raw));
+    window.location.href = `https://${NEW_DOMAIN}/#migrate=${encoded}`;
+  } catch (e) {
+    showToast('数据较大，正在跳转到新域名...', 'info');
+    setTimeout(() => { window.location.href = `https://${NEW_DOMAIN}/`; }, 1500);
+  }
+}
+
+// ============================================================
 // 初始化
 // ============================================================
+
+// 新域名优先检测迁移数据
+checkAndImportMigrationData();
 
 loadData();
 render();
 renderPersonalSection();
+
+// 旧域名检测迁移横幅
+checkDomainMigration();

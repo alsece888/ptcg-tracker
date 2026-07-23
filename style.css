@@ -1729,3 +1729,48 @@ body {
 .paste-msg { margin-top: 8px; font-size: 13px; min-height: 20px; }
 .paste-msg.success { color: var(--accent); }
 .paste-msg.error { color: var(--danger); }
+
+/* ============================================================
+   域名迁移横幅
+   ============================================================ */
+#migrationBanner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 10000;
+  background: linear-gradient(135deg, #0caf7b, #4ecca3);
+  color: #fff;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+  flex-wrap: wrap;
+}
+#migrationBanner .mb-text { flex: 1; min-width: 200px; }
+#migrationBanner .mb-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.mb-btn-primary {
+  background: #fff;
+  color: #0caf7b;
+  border: none;
+  padding: 6px 18px;
+  border-radius: 6px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 13px;
+  transition: transform 0.15s;
+}
+.mb-btn-primary:hover { transform: scale(1.05); }
+.mb-btn-dismiss {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.5);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.mb-btn-dismiss:hover { background: rgba(255,255,255,0.15); }
