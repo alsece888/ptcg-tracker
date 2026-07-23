@@ -702,6 +702,7 @@ function renderHistory() {
 }
 
 function renderPopTurn(id, firstMove) {
+  if (!data || !data.personal || !data.personal.matchHistory) return '';
   var editing = data.personal.matchHistory.find(function(h){ return h.id===id && h._editingTurn; });
   if (editing) {
     return '<button class="hist-btn-turn '+ (firstMove==='first'?'active':'gray') +'" data-turn-id="'+esc(id)+'" data-turn="first">先</button>'+
