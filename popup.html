@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>MALO-TCG 战绩</title>
 <style>
 :root,
@@ -331,7 +334,7 @@ body {
   -webkit-backdrop-filter: var(--blur);
 }
 .hist-item:last-child { margin-bottom: 0; }
-.hist-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hist-left { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: nowrap; overflow: hidden; }
 .hist-deck-dot {
   width: 5px; height: 5px;
   border-radius: 50%;
@@ -342,12 +345,13 @@ body {
 .hist-deck-dot.neutral { background: var(--text-3); }
 .hist-deck-name {
   font-size: 11px; font-weight: 600; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 75px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px;
+  flex-shrink: 1; min-width: 0;
 }
-.hist-delta { font-size: 11px; font-family: var(--mono); white-space: nowrap; display: flex; gap: 3px; }
+.hist-delta { font-size: 11px; font-family: var(--mono); white-space: nowrap; display: flex; gap: 3px; flex-shrink: 0; }
 .hist-delta .dw { color: var(--accent); font-weight: 700; }
 .hist-delta .dl { color: var(--danger); font-weight: 700; }
-.hist-turn { display: inline-flex; gap: 2px; align-items: center; }
+.hist-turn { display: inline-flex; gap: 2px; align-items: center; flex-shrink: 0; }
 .hist-btn-turn {
   font-size: 9px;
   font-weight: 700;
@@ -386,6 +390,11 @@ body {
   white-space: nowrap;
   cursor: pointer;
   transition: all 0.15s;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
 }
 .hist-opp:hover { background: rgba(59,109,233,0.18); }
 [data-theme="dark"] .hist-opp { color: #5b8def; }
@@ -413,6 +422,7 @@ body {
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s;
+  flex-shrink: 0;
 }
 .hist-opp-placeholder:hover { color: #3b6de9; border-color: #3b6de9; }
 .hist-opp-select {
