@@ -935,7 +935,7 @@ async function refreshApiOverview() {
             if (p.draftMatch) {
               if (p.draftMatch.firstMove) newEntry.firstMove = p.draftMatch.firstMove;
               if (p.draftMatch.opponentDeck) newEntry.opponentDeck = p.draftMatch.opponentDeck;
-              p.draftMatch = null;  // 消耗后清除
+              p.draftMatch = { firstMove: null, opponentDeck: '' };  // 消耗后重置
             }
             p.matchHistory.push(newEntry);
           }
@@ -1532,16 +1532,6 @@ function renderMatchupAnalysis() {
 // ============================================================
 
 function renderDraftCard(draft, deckList) {
-  if (!draft) {
-    // 无草案：显示创建按钮
-    return `<div class="history-item draft-card draft-empty">
-      <div class="draft-label">📝 预输入新对局</div>
-      <div class="draft-hint">提前填入先后手和对手卡组，刷新战绩后自动应用</div>
-      <button class="btn btn-sm btn-ghost draft-create-btn" onclick="ensureDraft();renderHistory();">＋ 创建</button>
-    </div>`;
-  }
-
-  // 有草案：显示编辑卡片
   const firstMove = draft.firstMove;
   const opp = draft.opponentDeck || '';
 
@@ -1558,25 +1548,18 @@ function renderDraftCard(draft, deckList) {
     ? '<button class="btn-turn active second" onclick="saveDraftTurn(\'second\')">后</button>'
     : '<button class="btn-turn second" onclick="saveDraftTurn(\'second\')">后</button>';
 
-  return `<div class="history-item draft-card draft-active">
-    <div class="draft-header">
-      <span class="draft-label">📝 新对局（预输入）</span>
-      <button class="btn btn-sm btn-ghost draft-clear-btn" onclick="clearDraft()" title="清除预输入">✕</button>
+  return `<div class="history-item draft-card">
+    <div class="history-left">
+      <span class="draft-tag" title="预输入">预</span>
+      <span class="history-turn">${turnLeft}${turnRight}</span>
+      <select class="history-opponent-select" id="draftOpponentSelect" onchange="saveDraftOpponent()">
+        <option value="">${opp ? '-- 未设置 --' : '+ 对手卡组'}</option>
+        ${selectOptions}
+      </select>
     </div>
-    <div class="draft-body">
-      <div class="draft-row">
-        <span class="draft-field-label">先后手</span>
-        <span class="history-turn">${turnLeft}${turnRight}</span>
-      </div>
-      <div class="draft-row">
-        <span class="draft-field-label">对手卡组</span>
-        <select class="history-opponent-select" id="draftOpponentSelect" onchange="saveDraftOpponent()">
-          <option value="">-- 未设置 --</option>
-          ${selectOptions}
-        </select>
-      </div>
+    <div class="history-right">
+      <button class="btn-history-action danger" onclick="clearDraft()" title="清除预输入">✕</button>
     </div>
-    <div class="draft-footer">刷新战绩后，预输入信息将自动填入新对局记录</div>
   </div>`;
 }
 
@@ -1587,15 +1570,10 @@ function renderHistory() {
   const emptyEl = $('historyEmpty');
   const deckList = p.deckList || [];
 
-  // 预输入草案卡片
+  // 预输入草案默认始终存在
+  ensureDraft();
   const draft = p.draftMatch;
   const draftHtml = renderDraftCard(draft, deckList);
-
-  if (history.length === 0 && !draft) {
-    listContainer.innerHTML = '';
-    emptyEl.style.display = 'block';
-    return;
-  }
 
   emptyEl.style.display = 'none';
 
@@ -1725,7 +1703,7 @@ function saveDraftOpponent() {
 }
 
 function clearDraft() {
-  state.personal.draftMatch = null;
+  state.personal.draftMatch = { firstMove: null, opponentDeck: '' };
   saveData();
   renderHistory();
 }

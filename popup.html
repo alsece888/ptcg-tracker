@@ -471,18 +471,9 @@ body {
 .hist-time { font-size: 10px; color: var(--text-3); font-family: var(--mono); flex-shrink: 0; margin-left: 4px; }
 .hist-empty { text-align: center; padding: 14px 8px; color: var(--text-3); font-size: 11px; }
 
-/* 预输入草案卡片 */
-.draft-card { border: 2px dashed var(--border); background: var(--bg-card); flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; margin-bottom: 8px; border-radius: 8px; }
-.draft-card.draft-empty { opacity: 0.8; }
-.draft-card.draft-active { border-color: var(--accent); border-style: solid; background: rgba(12,175,123,0.04); }
-.draft-header { display: flex; justify-content: space-between; align-items: center; }
-.draft-label { font-size: 12px; font-weight: 700; color: var(--accent); }
-.draft-hint { font-size: 10px; color: var(--text-3); margin: 2px 0 4px; }
-.draft-create-btn { font-size: 10px; }
-.draft-body { display: flex; flex-direction: column; gap: 6px; }
-.draft-row { display: flex; align-items: center; gap: 8px; }
-.draft-field-label { font-size: 10px; color: var(--text-3); min-width: 48px; }
-.draft-footer { font-size: 9px; color: var(--text-3); text-align: center; padding-top: 4px; border-top: 1px dashed var(--border); }
+/* 预输入草案卡片：与普通记录同结构，颜色区分 */
+.hist-item.draft-card { background: rgba(12,175,123,0.06); border-left: 3px solid var(--accent); }
+.draft-tag { font-size: 10px; font-weight: 700; padding: 2px 5px; border-radius: 3px; background: var(--accent); color: #fff; line-height: 1; flex-shrink: 0; }
 
 /* ===== Status ===== */
 .p-status {
@@ -691,6 +682,9 @@ function renderHistory() {
   var h = ((data && data.personal) ? data.personal.matchHistory : null) || [];
   var deckList = (data && data.personal && data.personal.deckList) ? data.personal.deckList : [];
   var c = byId('historyList');
+
+  // 预输入草案默认始终存在
+  popEnsureDraft();
   var draft = (data && data.personal) ? data.personal.draftMatch : null;
   var draftHtml = renderPopDraftCard(draft, deckList);
 
@@ -826,20 +820,13 @@ function popSaveDraftOpp() {
 
 function popClearDraft() {
   if (!data || !data.personal) return;
-  data.personal.draftMatch = null;
+  data.personal.draftMatch = { firstMove: null, opponentDeck: '' };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   channel.postMessage({ type: 'data-updated' });
   render();
 }
 
 function renderPopDraftCard(draft, deckList) {
-  if (!draft) {
-    return '<div class="hist-item draft-card draft-empty">'+
-      '<div class="draft-label">📝 预输入新对局</div>'+
-      '<div class="draft-hint">提前输入先后手/对手，刷新后自动应用</div>'+
-      '<button class="hist-btn-mini draft-create-btn" onclick="popEnsureDraft();render();">＋ 创建</button>'+
-      '</div>';
-  }
   var firstMove = draft.firstMove;
   var opp = draft.opponentDeck || '';
   var opts = deckList.map(function(dl){
@@ -854,15 +841,10 @@ function renderPopDraftCard(draft, deckList) {
     ? '<button class="hist-btn-turn active second" onclick="popSaveDraftTurn(\'second\')">后</button>'
     : '<button class="hist-btn-turn second" onclick="popSaveDraftTurn(\'second\')">后</button>';
 
-  return '<div class="hist-item draft-card draft-active">'+
-    '<div class="draft-header"><span class="draft-label">📝 新对局（预输入）</span>'+
-    '<button class="hist-btn-mini cancel" onclick="popClearDraft()" title="清除">✕</button></div>'+
-    '<div class="draft-body">'+
-    '<div class="draft-row"><span class="draft-field-label">先后手</span><span class="hist-turn">'+turnLeft+turnRight+'</span></div>'+
-    '<div class="draft-row"><span class="draft-field-label">对手卡组</span>'+
-    '<select class="hist-opp-select draft-opp-select" onchange="popSaveDraftOpp()"><option value="">-- 未设置 --</option>'+opts+'</select></div>'+
-    '</div>'+
-    '<div class="draft-footer">刷新后自动填入新对局记录</div>'+
+  return '<div class="hist-item draft-card">'+
+    '<div class="hist-left"><span class="draft-tag" title="预输入">预</span><span class="hist-turn">'+turnLeft+turnRight+'</span>'+
+    '<select class="hist-opp-select draft-opp-select" onchange="popSaveDraftOpp()"><option value="">'+(opp?'-- 未设置 --':'+ 对手卡组')+'</option>'+opts+'</select></div>'+
+    '<button class="hist-btn-mini cancel" onclick="popClearDraft()" title="清除">✕</button>'+
     '</div>';
 }
 
