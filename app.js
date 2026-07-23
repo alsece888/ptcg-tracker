@@ -2300,6 +2300,8 @@ function performMigration() {
 // 新域名：一键从旧域名导入数据（postMessage 方式）
 // ============================================================
 
+var _legacyImportTimer = null;
+
 function startLegacyImport() {
   var w = 480, h = 280;
   var left = (screen.width - w) / 2;
@@ -2310,10 +2312,60 @@ function startLegacyImport() {
     'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top
   );
   if (!win) {
-    showToast('请允许浏览器弹出窗口以完成数据导入', 'error');
+    showLegacyImportFallback();
     return;
   }
-  showToast('正在从旧域名读取数据...', 'info');
+  showToast('正在尝试从旧域名读取数据...', 'info');
+
+  // 3秒后如果没收到 postMessage（CNAME 重定向导致弹窗跳转到新域名），显示手动迁移指引
+  _legacyImportTimer = setTimeout(function() {
+    if (win && !win.closed) { win.close(); }
+    showLegacyImportFallback();
+  }, 3500);
+}
+
+function showLegacyImportFallback() {
+  if (document.getElementById('legacyImportFallback')) return;
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'legacyImportFallback';
+  overlay.innerHTML =
+    '<div class="modal-box legacy-modal">' +
+      '<h3>📥 从旧域名导入数据</h3>' +
+      '<p class="legacy-desc">旧域名已自动跳转到新域名，弹窗方式无法读取数据。请使用以下方式迁移：</p>' +
+      '<div class="legacy-methods">' +
+        '<div class="legacy-method">' +
+          '<strong>方式一：JSON 文件导入</strong>' +
+          '<p>如果你之前在旧域名导出过 JSON 数据文件：</p>' +
+          '<button class="btn btn-primary" id="legacyFileImport">📤 选择 JSON 文件导入</button>' +
+        '</div>' +
+        '<div class="legacy-method">' +
+          '<strong>方式二：手动复制数据</strong>' +
+          '<ol>' +
+            '<li>用浏览器打开旧域名，按 <b>F12</b> 打开开发者工具</li>' +
+            '<li>进入 <b>Application</b> → <b>Local Storage</b> → <code>alsece888.github.io</code></li>' +
+            '<li>复制 <code>ptcg-tracker-data</code> 的值</li>' +
+            '<li>回到本页面，点击下方按钮粘贴：</li>' +
+          '</ol>' +
+          '<button class="btn btn-secondary" id="legacyPasteImport">📋 粘贴数据导入</button>' +
+        '</div>' +
+      '</div>' +
+      '<button class="btn btn-ghost legacy-close-btn" id="legacyCloseFallback">关闭</button>' +
+    '</div>';
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) { overlay.remove(); }
+  });
+  document.getElementById('legacyCloseFallback').addEventListener('click', function() { overlay.remove(); });
+  document.getElementById('legacyFileImport').addEventListener('click', function() {
+    overlay.remove();
+    document.getElementById('importFile').click();
+  });
+  document.getElementById('legacyPasteImport').addEventListener('click', function() {
+    overlay.remove();
+    openPasteModal();
+  });
 }
 
 function setupLegacyImport() {
@@ -2323,6 +2375,8 @@ function setupLegacyImport() {
   // 监听来自旧域名的 postMessage
   window.addEventListener('message', function(event) {
     if (!event.data || event.data.type !== 'ptcg-legacy-import') return;
+    // 收到消息，清除 fallback 定时器
+    if (_legacyImportTimer) { clearTimeout(_legacyImportTimer); _legacyImportTimer = null; }
     if (event.data.success && event.data.data) {
       try {
         var data = JSON.parse(event.data.data);

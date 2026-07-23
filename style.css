@@ -1788,3 +1788,82 @@ body {
   transition: background 0.15s;
 }
 .mb-btn-dismiss:hover { background: rgba(255,255,255,0.15); }
+
+/* ============================================================
+   旧数据导入指引弹窗
+   ============================================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.legacy-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px 30px;
+  max-width: 520px;
+  width: 90%;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+.legacy-modal h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--text);
+}
+.legacy-desc {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+.legacy-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+.legacy-method {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.legacy-method strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: var(--text);
+}
+.legacy-method p {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.legacy-method ol {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+.legacy-method ol code {
+  background: var(--bg-card);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--accent);
+}
+.legacy-method .btn {
+  font-size: 12px;
+}
+.legacy-close-btn {
+  display: block;
+  margin: 0 auto;
+  font-size: 13px;
+}
