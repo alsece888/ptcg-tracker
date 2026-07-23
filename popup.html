@@ -169,11 +169,11 @@ body {
 .gauge-section {
   display: flex;
   justify-content: center;
-  padding: 14px;
+  padding: 6px;
 }
 .gauge {
   position: relative;
-  width: 120px; height: 120px;
+  width: 70px; height: 70px;
 }
 .gauge-ring {
   position: absolute;
@@ -191,19 +191,19 @@ body {
   align-items: center;
   justify-content: center;
 }
-.gauge-svg { transform: rotate(-90deg); width: 90px; height: 90px; }
+.gauge-svg { transform: rotate(-90deg); width: 54px; height: 54px; }
 .gauge-bg {
   fill: none;
   stroke: var(--divider);
-  stroke-width: 8;
+  stroke-width: 6;
 }
 .gauge-fill {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 8;
+  stroke-width: 6;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.7s cubic-bezier(0.4, 0, 0.2, 1);
-  filter: drop-shadow(0 0 8px var(--accent-glow));
+  filter: drop-shadow(0 0 6px var(--accent-glow));
 }
 .gauge-text {
   position: absolute;
@@ -215,19 +215,19 @@ body {
   z-index: 2;
 }
 .gauge-pct {
-  font-size: 27px;
+  font-size: 17px;
   font-weight: 800;
   font-family: var(--mono);
   line-height: 1;
   color: var(--text);
 }
 .gauge-label {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-3);
   font-weight: 600;
-  margin-top: 2px;
+  margin-top: 1px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
 }
 
 /* ===== Deck Selector ===== */
@@ -255,11 +255,11 @@ body {
 .deck-arrow { font-size: 10px; color: var(--text-3); margin-right: 10px; pointer-events: none; }
 
 /* ===== Win / Loss ===== */
-.wl-row { display: flex; gap: 10px; padding: 0 14px 0 14px; }
+.wl-row { display: flex; gap: 8px; padding: 0 14px 4px; }
 .wl-card {
   flex: 1;
-  border-radius: 12px;
-  padding: 14px 10px;
+  border-radius: 10px;
+  padding: 8px 6px;
   text-align: center;
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
@@ -276,21 +276,43 @@ body {
   box-shadow: inset 0 0 0 0.5px rgba(229,83,75,0.18);
 }
 .wl-card.lose:hover { box-shadow: 0 4px 16px var(--danger-glow), inset 0 0 0 0.5px rgba(229,83,75,0.22); }
-.wl-card .wl-icon { font-size: 18px; margin-bottom: 2px; }
+.wl-card .wl-icon { font-size: 12px; margin-bottom: 1px; }
 .wl-card .wl-num {
-  font-size: 27px;
+  font-size: 18px;
   font-weight: 800;
   font-family: var(--mono);
   line-height: 1.1;
 }
-.wl-card.win .wl-num { color: var(--accent); text-shadow: 0 0 12px var(--accent-glow); }
-.wl-card.lose .wl-num { color: var(--danger); text-shadow: 0 0 12px var(--danger-glow); }
-.wl-card .wl-label { font-size: 11px; color: var(--text-2); font-weight: 600; }
+.wl-card.win .wl-num { color: var(--accent); text-shadow: 0 0 8px var(--accent-glow); }
+.wl-card.lose .wl-num { color: var(--danger); text-shadow: 0 0 8px var(--danger-glow); }
+.wl-card .wl-label { font-size: 9px; color: var(--text-2); font-weight: 600; }
 
-/* ===== Total Badge (standalone, not glass panel) ===== */
+/* ===== Stats Panel (compact horizontal) ===== */
+.stats-panel { padding: 8px 10px; margin-bottom: 8px; }
+.stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.stats-row .gauge-section {
+  padding: 0;
+  flex-shrink: 0;
+}
+.stats-row .wl-row {
+  padding: 0;
+  flex: 0 0 auto;
+  width: 100px;
+}
+.stats-row .wl-card {
+  padding: 6px 4px;
+}
+.stats-panel .total-badge {
+  padding: 4px 0 0;
+}
 .total-badge {
   text-align: center;
-  padding: 2px 0 8px;
+  padding: 0 0 4px;
 }
 .total-badge span {
   display: inline-block;
@@ -298,8 +320,8 @@ body {
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border-radius: 20px;
-  padding: 5px 18px;
-  font-size: 11px;
+  padding: 3px 12px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-2);
   font-family: var(--mono);
@@ -520,7 +542,7 @@ body::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 4px; }
 </style>
 </head>
 <body>
-<!-- VERSION: 2026-07-23-v3 (先/后按钮版) -->
+<!-- VERSION: 2026-07-23-v4 (compact stats) -->
 
 <!-- Background decorative blobs (blurred by glass panels above) -->
 <div class="bg-deco">
@@ -546,22 +568,39 @@ body::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 4px; }
     <button class="p-btn-refresh" onclick="requestRefresh()" title="刷新数据">🔄</button>
   </div>
 
-  <!-- Gauge -->
-  <div class="gauge-section">
-    <div class="gauge">
-      <div class="gauge-ring"></div>
-      <div class="gauge-svg-wrap">
-        <svg class="gauge-svg" viewBox="0 0 90 90">
-          <circle class="gauge-bg" cx="45" cy="45" r="38"/>
-          <circle class="gauge-fill" id="gFill" cx="45" cy="45" r="38"
-            stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
-        </svg>
+  <!-- Stats -->
+  <div class="glass-panel stats-panel">
+    <div class="stats-row">
+      <div class="gauge-section">
+        <div class="gauge">
+          <div class="gauge-ring"></div>
+          <div class="gauge-svg-wrap">
+            <svg class="gauge-svg" viewBox="0 0 90 90">
+              <circle class="gauge-bg" cx="45" cy="45" r="38"/>
+              <circle class="gauge-fill" id="gFill" cx="45" cy="45" r="38"
+                stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+            </svg>
+          </div>
+          <div class="gauge-text">
+            <div class="gauge-pct" id="gPct">--</div>
+            <div class="gauge-label">胜率</div>
+          </div>
+        </div>
       </div>
-      <div class="gauge-text">
-        <div class="gauge-pct" id="gPct">--</div>
-        <div class="gauge-label">胜率</div>
+      <div class="wl-row">
+        <div class="wl-card win">
+          <div class="wl-icon">⚔</div>
+          <div class="wl-num" id="deckWins">0</div>
+          <div class="wl-label">胜</div>
+        </div>
+        <div class="wl-card lose">
+          <div class="wl-icon">💀</div>
+          <div class="wl-num" id="deckLosses">0</div>
+          <div class="wl-label">负</div>
+        </div>
       </div>
     </div>
+    <div class="total-badge"><span id="deckTotal">合计 0 场</span></div>
   </div>
 
   <!-- Deck -->
@@ -570,23 +609,6 @@ body::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 4px; }
     <select id="deckSel" class="deck-select"></select>
     <span class="deck-arrow">▾</span>
   </div>
-
-  <!-- Win / Loss -->
-  <div class="wl-row">
-    <div class="wl-card win">
-      <div class="wl-icon">⚔</div>
-      <div class="wl-num" id="deckWins">0</div>
-      <div class="wl-label">胜场</div>
-    </div>
-    <div class="wl-card lose">
-      <div class="wl-icon">💀</div>
-      <div class="wl-num" id="deckLosses">0</div>
-      <div class="wl-label">败场</div>
-    </div>
-  </div>
-
-  <!-- Total -->
-  <div class="total-badge"><span id="deckTotal">合计 0 场</span></div>
 
   <!-- API -->
   <div class="glass-panel api-mini" id="apiMini" style="display:none;">
