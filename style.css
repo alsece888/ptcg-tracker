@@ -782,6 +782,65 @@ body {
   font-family: var(--mono);
 }
 
+/* 预输入草案卡片 */
+.draft-card {
+  border: 2px dashed var(--border);
+  background: var(--bg-card);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.draft-card.draft-empty {
+  border-style: dashed;
+  opacity: 0.8;
+}
+.draft-card.draft-active {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--accent-dim, rgba(12,175,123,0.05));
+}
+.draft-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.draft-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.draft-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.draft-create-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+.draft-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.draft-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.draft-field-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 60px;
+}
+.draft-footer {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+
 .history-actions {
   display: flex;
   gap: 8px;

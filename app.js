@@ -385,7 +385,7 @@ function uuid() {
 // --- 状态 ---
 let state = {
   watchlist: [], lastUpdate: null, players: {}, notes: {},
-  personal: { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] }
+  personal: { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null }
 };
 let currentSort = 'exp';
 let editingNote = null;
@@ -430,10 +430,11 @@ function loadData() {
         lastUpdate: data.lastUpdate || null,
         players: data.players || {},
         notes: data.notes || {},
-        personal: data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] },
+        personal: data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null },
       };
       // 初始化 deckList
       if (!state.personal.deckList) state.personal.deckList = [];
+      if (state.personal.draftMatch === undefined) state.personal.draftMatch = null;
       // 迁移旧版卡组数据（wins/losses → accumulatedWins/accumulatedLosses + snapshot）
       if (state.personal && state.personal.decks) {
         let migrated = false;
@@ -747,8 +748,9 @@ function applyImportedData(data) {
   state.lastUpdate = data.lastUpdate || null;
   state.players = data.players || {};
   state.notes = data.notes || {};
-  state.personal = data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] };
+  state.personal = data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null };
   if (!state.personal.deckList) state.personal.deckList = [];
+  if (state.personal.draftMatch === undefined) state.personal.draftMatch = null;
   saveData();
   render();
   renderPersonalSection();
@@ -796,7 +798,7 @@ function clearAllData() {
   if (!confirm('确定清空所有数据吗？此操作不可恢复！')) return;
   if (!confirm('再次确认：将删除所有关注玩家、战绩和备注。')) return;
   state = { watchlist: [], lastUpdate: null, players: {}, notes: {},
-    personal: { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] } };
+    personal: { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null } };
   saveData();
   render();
   renderPersonalSection();
@@ -919,7 +921,7 @@ async function refreshApiOverview() {
             curDeck.snapshotLosses = apiLosses;
 
             if (!p.matchHistory) p.matchHistory = [];
-            p.matchHistory.push({
+            const newEntry = {
               id: uuid(),
               deckId: p.currentDeckId,
               deckName: curDeck.name,
@@ -928,7 +930,14 @@ async function refreshApiOverview() {
               cumulativeWins: curDeck.accumulatedWins,
               cumulativeLosses: curDeck.accumulatedLosses,
               time: new Date().toISOString(),
-            });
+            };
+            // 自动填充预输入信息
+            if (p.draftMatch) {
+              if (p.draftMatch.firstMove) newEntry.firstMove = p.draftMatch.firstMove;
+              if (p.draftMatch.opponentDeck) newEntry.opponentDeck = p.draftMatch.opponentDeck;
+              p.draftMatch = null;  // 消耗后清除
+            }
+            p.matchHistory.push(newEntry);
           }
         } else if (deltaWins < 0 || deltaLosses < 0) {
           // 数据回退（如跨赛季），只更新快照不累加
@@ -1518,6 +1527,59 @@ function renderMatchupAnalysis() {
   }).join('');
 }
 
+// ============================================================
+// 预输入草案卡片渲染
+// ============================================================
+
+function renderDraftCard(draft, deckList) {
+  if (!draft) {
+    // 无草案：显示创建按钮
+    return `<div class="history-item draft-card draft-empty">
+      <div class="draft-label">📝 预输入新对局</div>
+      <div class="draft-hint">提前填入先后手和对手卡组，刷新战绩后自动应用</div>
+      <button class="btn btn-sm btn-ghost draft-create-btn" onclick="ensureDraft();renderHistory();">＋ 创建</button>
+    </div>`;
+  }
+
+  // 有草案：显示编辑卡片
+  const firstMove = draft.firstMove;
+  const opp = draft.opponentDeck || '';
+
+  const selectOptions = deckList.map(dl => {
+    const sel = dl.name === opp ? ' selected' : '';
+    return `<option value="${esc(dl.name)}"${sel}>${esc(dl.name)}</option>`;
+  }).join('');
+
+  // 先后手按钮
+  const turnLeft = firstMove === 'first'
+    ? '<button class="btn-turn active" onclick="saveDraftTurn(\'first\')">先</button>'
+    : '<button class="btn-turn" onclick="saveDraftTurn(\'first\')">先</button>';
+  const turnRight = firstMove === 'second'
+    ? '<button class="btn-turn active second" onclick="saveDraftTurn(\'second\')">后</button>'
+    : '<button class="btn-turn second" onclick="saveDraftTurn(\'second\')">后</button>';
+
+  return `<div class="history-item draft-card draft-active">
+    <div class="draft-header">
+      <span class="draft-label">📝 新对局（预输入）</span>
+      <button class="btn btn-sm btn-ghost draft-clear-btn" onclick="clearDraft()" title="清除预输入">✕</button>
+    </div>
+    <div class="draft-body">
+      <div class="draft-row">
+        <span class="draft-field-label">先后手</span>
+        <span class="history-turn">${turnLeft}${turnRight}</span>
+      </div>
+      <div class="draft-row">
+        <span class="draft-field-label">对手卡组</span>
+        <select class="history-opponent-select" id="draftOpponentSelect" onchange="saveDraftOpponent()">
+          <option value="">-- 未设置 --</option>
+          ${selectOptions}
+        </select>
+      </div>
+    </div>
+    <div class="draft-footer">刷新战绩后，预输入信息将自动填入新对局记录</div>
+  </div>`;
+}
+
 function renderHistory() {
   const p = state.personal;
   const history = p.matchHistory || [];
@@ -1525,7 +1587,11 @@ function renderHistory() {
   const emptyEl = $('historyEmpty');
   const deckList = p.deckList || [];
 
-  if (history.length === 0) {
+  // 预输入草案卡片
+  const draft = p.draftMatch;
+  const draftHtml = renderDraftCard(draft, deckList);
+
+  if (history.length === 0 && !draft) {
     listContainer.innerHTML = '';
     emptyEl.style.display = 'block';
     return;
@@ -1535,7 +1601,7 @@ function renderHistory() {
 
   // 倒序显示（最新的在上面）
   const reversed = [...history].reverse();
-  listContainer.innerHTML = reversed.map(h => {
+  listContainer.innerHTML = draftHtml + reversed.map(h => {
     const d = new Date(h.time);
     const timeStr = `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     const opponentDeck = h.opponentDeck || '';
@@ -1627,6 +1693,40 @@ function saveHistoryTurn(id, turn) {
     showToast('先后手已保存', 'success');
   }
   editingHistoryId = null;
+  renderHistory();
+}
+
+// ============================================================
+// 预输入草案（新对局）
+// ============================================================
+
+function ensureDraft() {
+  const p = state.personal;
+  if (!p.draftMatch) {
+    p.draftMatch = { firstMove: null, opponentDeck: '' };
+    saveData();
+  }
+}
+
+function saveDraftTurn(turn) {
+  ensureDraft();
+  state.personal.draftMatch.firstMove = turn;
+  saveData();
+  renderHistory();
+}
+
+function saveDraftOpponent() {
+  const sel = document.getElementById('draftOpponentSelect');
+  if (!sel) return;
+  ensureDraft();
+  state.personal.draftMatch.opponentDeck = sel.value;
+  saveData();
+  renderHistory();
+}
+
+function clearDraft() {
+  state.personal.draftMatch = null;
+  saveData();
   renderHistory();
 }
 
@@ -2433,9 +2533,10 @@ function setupLegacyImport() {
           lastUpdate: data.lastUpdate || null,
           players: data.players || {},
           notes: data.notes || {},
-          personal: data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] },
+          personal: data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null },
         };
         if (!state.personal.deckList) state.personal.deckList = [];
+      if (state.personal.draftMatch === undefined) state.personal.draftMatch = null;
         saveData();
         showToast('数据导入成功！', 'success');
         setTimeout(function() { location.reload(); }, 800);
