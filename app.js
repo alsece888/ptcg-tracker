@@ -2100,6 +2100,9 @@ $('popupBtn').addEventListener('click', async () => {
     return;
   }
 
+  // 每次用时间戳参数，彻底绕过浏览器缓存
+  const popupUrl = 'popup.html?v=' + Date.now();
+
   // 优先：Document Picture-in-Picture API — 始终置顶于所有窗口之上
   if ('documentPictureInPicture' in window) {
     try {
@@ -2109,7 +2112,7 @@ $('popupBtn').addEventListener('click', async () => {
       });
 
       // 将 popup.html 内容写入 PiP 窗口
-      const resp = await fetch('popup.html?v=2');
+      const resp = await fetch(popupUrl);
       let html = await resp.text();
       // 注入 <base> 修复相对路径（PiP 窗口的 base URL 是 about:blank）
       html = html.replace('</head>', '<base href="' + location.href.replace(/\/[^/]*$/, '/') + '"></head>');
@@ -2134,7 +2137,7 @@ $('popupBtn').addEventListener('click', async () => {
   }
 
   // 回退：普通浏览器窗口（不置顶）
-  popupWindow = window.open('popup.html?v=2', 'ptcg-popup',
+  popupWindow = window.open(popupUrl, 'ptcg-popup',
     'width=380,height=520,left=' + (screen.width - 400) + ',top=100');
   if (popupWindow) {
     const checkClosed = setInterval(() => {
