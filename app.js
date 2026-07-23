@@ -2173,9 +2173,10 @@ const syncChannel = new BroadcastChannel('ptcg-sync');
 
 // 打开悬浮窗（优先使用 PiP 强制置顶，不支持时回退到普通窗口）
 $('popupBtn').addEventListener('click', async () => {
+  // 关闭旧窗口，确保下次打开时加载最新代码
   if (popupWindow && !popupWindow.closed) {
-    popupWindow.focus();
-    return;
+    popupWindow.close();
+    popupWindow = null;
   }
 
   // 每次用时间戳参数，彻底绕过浏览器缓存
