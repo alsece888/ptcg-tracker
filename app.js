@@ -415,6 +415,7 @@ const sortBy = $('sortBy');
 const searchInput = $('searchInput');
 const menuBtn = $('menuBtn');
 const menuDropdown = $('menuDropdown');
+const mobileList = $('mobilePlayerList');
 
 // ============================================================
 // 数据持久化 (localStorage)
@@ -1811,12 +1812,12 @@ function render() {
   if (watchlist.length === 0) {
     emptyState.style.display = 'block';
     tableContainer.style.display = 'none';
+    if (mobileList) mobileList.style.display = 'none';
     statsSection.style.display = 'none';
     return;
   }
 
   emptyState.style.display = 'none';
-  tableContainer.style.display = 'block';
 
   // 收集玩家数据
   let rows = watchlist.map(name => {
@@ -1860,7 +1861,15 @@ function render() {
     }
   });
 
-  playerTableBody.innerHTML = rows.map(row => renderRow(row)).join('');
+  if (mobileList && isMobileView()) {
+    tableContainer.style.display = 'none';
+    mobileList.style.display = 'flex';
+    mobileList.innerHTML = rows.map(row => renderMobileRow(row)).join('');
+  } else {
+    if (mobileList) mobileList.style.display = 'none';
+    tableContainer.style.display = 'block';
+    playerTableBody.innerHTML = rows.map(row => renderRow(row)).join('');
+  }
   renderStats(rows);
 }
 
@@ -1937,6 +1946,65 @@ function renderRow(row) {
     <td class="col-streak"><div class="streak-display">${streakHtml}</div></td>
     <td class="col-action">${deleteBtn(row.key)}</td>
   </tr>`;
+}
+
+// 移动端视图判断（窄屏时用卡片列表替代表格）
+const mobileMedia = window.matchMedia('(max-width: 768px)');
+function isMobileView() {
+  return mobileMedia.matches;
+}
+
+function mobileRankHtml(row) {
+  const rank = row.rank;
+  if (rank === 1) return `<span class="rank-badge rank-1">1</span>`;
+  if (rank === 2) return `<span class="rank-badge rank-2">2</span>`;
+  if (rank === 3) return `<span class="rank-badge rank-3">3</span>`;
+  if (rank) return `<span class="rank-badge rank-other">${rank}</span>`;
+  return `<span class="rank-badge rank-none">未上榜</span>`;
+}
+
+function renderMobileRow(row) {
+  const top = `<div class="mpc-top">
+      <div class="mpc-rank">${mobileRankHtml(row)}</div>
+      <div class="mpc-name"><span class="player-name">${esc(row.name)}</span></div>
+      <div class="mpc-delete">${deleteBtn(row.key)}</div>
+    </div>`;
+
+  if (row.pending) {
+    return `<div class="mobile-player-card row-pending">${top}<div class="mpc-status">点击"更新数据"获取玩家信息</div></div>`;
+  }
+  if (row.notFound) {
+    return `<div class="mobile-player-card row-notfound">${top}<div class="mpc-status"><span class="status-badge badge-notfound">未找到该玩家（可能未进行排位赛）</span></div></div>`;
+  }
+  if (row.error) {
+    return `<div class="mobile-player-card row-error">${top}<div class="mpc-status"><span class="status-badge badge-error">查询失败: ${esc(row.error)}</span></div></div>`;
+  }
+
+  const wr = row.winRate;
+  const wrCls = winRateClass(wr);
+  const wrColor = winRateColor(wr);
+
+  let streakHtml;
+  if (row.winTemp > 0) {
+    streakHtml = `<span class="streak-win">🔥${row.winTemp}连胜</span><span class="streak-max">(最高${row.winMax})</span>`;
+  } else if (row.loseTemp > 0) {
+    streakHtml = `<span class="streak-lose">💧${row.loseTemp}连败</span><span class="streak-max">(最高${row.loseMax})</span>`;
+  } else {
+    streakHtml = `<span class="streak-zero">-</span>`;
+  }
+
+  return `<div class="mobile-player-card">
+    ${top}
+    <div class="mpc-meta">
+      <div class="meta-item"><span class="meta-label">积分</span><span><span class="exp-value">${row.exp}</span> <span class="exp-highest">最高 ${row.highestExp}</span></span></div>
+      <div class="meta-item"><span class="meta-label">胜场</span><span class="win-count">${row.winTotal}</span></div>
+      <div class="meta-item"><span class="meta-label">败场</span><span class="lose-count">${row.loseTotal}</span></div>
+      <div class="meta-item"><span class="meta-label">总场数</span><span class="games-count">${row.totalGames}</span></div>
+      <div class="meta-item"><span class="meta-label">胜率</span><span class="winrate-bar"><span class="winrate-track"><span class="winrate-fill" style="width:${wr}%;background:${wrColor}"></span></span><span class="winrate-text ${wrCls}">${wr}%</span></span></div>
+    </div>
+    <div class="mpc-note">${renderNoteCell(row.key)}</div>
+    <div class="mpc-streak">${streakHtml}</div>
+  </div>`;
 }
 
 function deleteBtn(name) {
@@ -2544,6 +2612,13 @@ function setupLegacyImport() {
     headerRight.appendChild(importBtn);
   }
 }
+
+// 屏幕宽度变化时切换表格 / 卡片列表
+let mobileResizeTimer = null;
+mobileMedia.addEventListener('change', () => {
+  clearTimeout(mobileResizeTimer);
+  mobileResizeTimer = setTimeout(() => render(), 150);
+});
 
 // ============================================================
 // 初始化

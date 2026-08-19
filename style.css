@@ -1943,3 +1943,598 @@ body {
   margin: 0 auto;
   font-size: 13px;
 }
+
+/* ============================================================
+   组卡板块
+   ============================================================ */
+.deck-builder-section {
+  margin-bottom: 28px;
+}
+
+.deck-builder-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+
+.deck-code-input {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color .15s;
+  box-sizing: border-box;
+}
+
+.deck-code-input:focus { border-color: var(--primary); }
+
+.deck-builder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.deck-builder-result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.deck-builder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.deck-builder-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.deck-builder-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.deck-builder-switch .sort-select { max-width: 220px; }
+
+.deck-builder-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.deck-builder-stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  text-align: center;
+}
+
+.deck-builder-stat .stat-num {
+  font-size: 22px;
+  font-weight: 800;
+  display: block;
+  font-family: var(--mono);
+}
+
+.deck-builder-stat .stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.deck-builder-stat.stat-ok .stat-num { color: var(--accent); }
+.deck-builder-stat.stat-warn .stat-num { color: var(--warning); }
+.deck-builder-stat.stat-danger .stat-num { color: var(--danger); }
+.deck-builder-stat.stat-primary .stat-num { color: var(--primary); }
+
+.deck-progress {
+  grid-column: 1 / -1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+
+.deck-progress-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.deck-progress-track {
+  height: 10px;
+  background: var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.deck-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), #ff7a45);
+  border-radius: 5px;
+  transition: width .25s;
+  min-width: 2px;
+}
+
+.deck-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.deck-card-tile {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  transition: border-color .15s, box-shadow .15s;
+  position: relative;
+}
+
+.deck-card-tile.complete {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* 已集齐的卡：卡图变黑白 */
+.deck-card-tile.complete .deck-card-img-wrap img {
+  filter: grayscale(1);
+  opacity: 0.7;
+}
+
+.deck-card-tile.missing { border-color: var(--warning); }
+.deck-card-tile.partial { border-color: var(--border-hover); }
+
+.deck-card-img-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 63 / 88;
+  background: var(--bg-input);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+
+.deck-card-img-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+.deck-card-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 800;
+  color: #fff;
+  opacity: 0;
+  transition: opacity .15s;
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.deck-card-zone.zone-plus {
+  left: 0;
+  width: 70%;
+  background: rgba(12, 175, 123, 0.18);
+}
+
+.deck-card-zone.zone-minus {
+  right: 0;
+  width: 30%;
+  background: rgba(233, 69, 96, 0.22);
+}
+
+.deck-card-img-wrap:hover .deck-card-zone,
+.deck-card-img-wrap:active .deck-card-zone { opacity: 1; }
+
+.deck-card-zone-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 70%;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+
+.deck-owned-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.deck-owned-badge.ok { background: rgba(12, 175, 123, 0.88); }
+
+.deck-card-text-fallback {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-align: center;
+  word-break: break-word;
+}
+
+.deck-card-tile.img-error img { display: none; }
+.deck-card-tile.img-error .deck-card-text-fallback { display: flex; }
+
+.deck-card-info {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deck-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deck-card-set {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deck-card-counts {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.deck-card-counts b { color: var(--accent); }
+.deck-card-tile.missing .deck-card-counts b { color: var(--warning); }
+
+/* 结果统计 */
+.deck-builder-breakdown {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.deck-builder-breakdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.deck-builder-breakdown-header h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.only-missing-toggle {
+  font-size: 13px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.deck-breakdown-body {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.deck-breakdown-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.deck-breakdown-row:last-child { border-bottom: none; }
+
+.breakdown-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breakdown-bar {
+  flex: 1;
+  max-width: 120px;
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.breakdown-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width .2s;
+}
+
+.deck-breakdown-row.missing .breakdown-bar-fill { background: var(--warning); }
+
+.breakdown-counts {
+  font-family: var(--mono);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.breakdown-status {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  min-width: 44px;
+  text-align: right;
+}
+
+.status-ok { color: var(--accent); }
+.status-missing { color: var(--danger); }
+
+.deck-breakdown-empty {
+  padding: 22px;
+  text-align: center;
+  color: var(--accent);
+  font-size: 14px;
+}
+
+/* ============================================================
+   移动端玩家卡片列表
+   ============================================================ */
+.mobile-player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.mobile-player-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-player-card.row-notfound { border-color: var(--warning); }
+.mobile-player-card.row-error { border-color: var(--danger); }
+
+.mpc-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mpc-rank { flex-shrink: 0; }
+
+.mpc-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.mpc-name .player-name { font-size: 14px; }
+
+.mpc-status {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.mpc-delete { flex-shrink: 0; }
+
+.mpc-meta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 14px;
+  font-size: 13px;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.meta-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.mpc-note { margin-top: 2px; }
+.mpc-streak { margin-top: 2px; }
+
+/* ============================================================
+   响应式增强（移动端）
+   ============================================================ */
+@media (max-width: 768px) {
+  .app {
+    padding: 12px 10px 36px;
+  }
+
+  .header {
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    gap: 12px;
+  }
+
+  .logo { font-size: 22px; }
+  .subtitle { font-size: 12px; }
+
+  .header-right {
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .btn {
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+
+  .btn-ghost { padding: 9px 10px; }
+  .btn-text { display: none; }
+  .btn-icon { font-size: 17px; }
+
+  .update-info {
+    text-align: left;
+    width: 100%;
+    order: -1;
+  }
+
+  .module-title {
+    font-size: 17px;
+    margin-bottom: 12px;
+  }
+
+  .personal-card,
+  .add-card,
+  .deck-builder-card {
+    padding: 14px 16px;
+  }
+
+  .history-actions {
+    flex-wrap: wrap;
+  }
+
+  .paste-modal-content {
+    padding: 18px;
+  }
+
+  .deck-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+
+  .deck-builder-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .deck-builder-actions .btn {
+    width: 100%;
+    justify-content: center;
+    padding: 9px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .deck-builder-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .deck-builder-switch {
+    width: 100%;
+  }
+
+  .deck-builder-switch .sort-select {
+    flex: 1;
+    max-width: none;
+  }
+
+  .deck-builder-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .table-header {
+    padding: 14px;
+  }
+
+  .deck-list-manage-panel {
+    padding: 12px;
+  }
+
+  .deck-list-add-row {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .deck-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 8px;
+  }
+
+  .deck-card-name { font-size: 12px; }
+  .deck-card-set { font-size: 10px; }
+  .deck-card-counts { font-size: 11px; }
+  .deck-owned-badge { font-size: 11px; }
+
+  .deck-builder-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mpc-meta {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+  }
+
+  .breakdown-counts { font-size: 12px; }
+  .breakdown-bar { display: none; }
+}

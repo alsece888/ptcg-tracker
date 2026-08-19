@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>组卡 - PTCG 玩家追踪器</title>
+  <meta name="description" content="导入 tcg.mik.moe 卡组代码，统计实体卡持有情况">
+  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
+</head>
+<body>
+  <div class="app">
+    <!-- 头部 -->
+    <header class="header">
+      <div class="header-left">
+        <h1 class="logo">
+          <span class="logo-icon">🃏</span>
+          组卡
+        </h1>
+        <p class="subtitle">导入卡组代码 · 统计实体卡持有情况</p>
+      </div>
+      <div class="header-right">
+        <a href="index.html" class="btn btn-ghost" title="返回主页">← 返回主页</a>
+      </div>
+    </header>
+
+    <!-- 组卡模块 -->
+    <h2 class="module-title">🧰 组卡</h2>
+    <section class="deck-builder-section" id="deckBuilderSection">
+      <div class="deck-builder-card">
+        <h2 class="section-title">🃏 导入卡组</h2>
+        <p class="section-desc">粘贴 <b>tcg.mik.moe</b> 的卡组代码或卡组链接，一键生成卡组。点击卡牌图片的<b>左侧 70%</b> 区域表示"我已有这张牌 +1"，点击<b>右侧 30%</b> 区域表示减少一张。</p>
+        <textarea id="deckCodeInput" class="deck-code-input" placeholder="在此粘贴卡组代码或卡组链接，例如：&#10;# Created by: tcg.mik.moe&#10;# 宝可梦官方微信小程序卡组ID: u0V77BXuvEFRERtCxS&#10;3 Charmander PAF 7&#10;1 Charmeleon MEW 5&#10;..." rows="6"></textarea>
+        <div class="deck-builder-actions">
+          <button id="importDeckBtn" class="btn btn-primary">📥 导入卡组</button>
+          <button id="loadExampleDeckBtn" class="btn btn-ghost">✨ 载入示例</button>
+          <button id="resetOwnedBtn" class="btn btn-ghost" title="清空当前卡组所有持有数">↺ 重置持有数</button>
+          <button id="deleteDeckBtn" class="btn btn-ghost" title="删除当前卡组及持有记录">🗑 删除卡组</button>
+        </div>
+        <div id="deckImportMsg" class="add-result"></div>
+      </div>
+
+      <div id="deckBuilderResult" class="deck-builder-result" style="display:none;">
+        <div class="deck-builder-header">
+          <h3 class="deck-builder-title" id="deckBuilderTitle">卡组</h3>
+          <div class="deck-builder-switch">
+            <label for="deckBuilderSelector">已存卡组</label>
+            <select id="deckBuilderSelector" class="sort-select"></select>
+          </div>
+        </div>
+        <div id="deckBuilderStats" class="deck-builder-stats"></div>
+        <div id="deckCardGrid" class="deck-card-grid"></div>
+        <div class="deck-builder-breakdown">
+          <div class="deck-builder-breakdown-header">
+            <h4>📋 结果统计</h4>
+            <label class="only-missing-toggle">
+              <input type="checkbox" id="onlyMissingToggle"> 仅显示缺卡
+            </label>
+          </div>
+          <div id="deckBreakdownBody" class="deck-breakdown-body"></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 底部 -->
+    <footer class="footer">
+      <p class="footer-text">卡图数据来源：<a href="https://tcg.mik.moe/decks/list/654034" target="_blank" rel="noopener">Cryst's Cards Database</a> · 组卡数据保存在本地浏览器</p>
+    </footer>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" style="display:none;"></div>
+
+  <script src="builder.js?v=16"></script>
+</body>
+</html>
