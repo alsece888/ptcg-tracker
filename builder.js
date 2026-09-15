@@ -4,9 +4,11 @@
 // ============================================================
 
 const CORS_PROXIES = [
-  (url) => `https://proxy.cors.sh/${url}`,
-  (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  // 2026-09：原三个中转已全部失效（域名注销 / 需要 API Key / 服务 520）
+  (url) => `https://cors.isteed.cc/${url}`,
+  (url) => `https://cors-get-proxy.sirjosh.workers.dev/?url=${encodeURIComponent(url)}`,
+  (url) => `https://cors.eu.org/${url}`,
+  (url) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`,
 ];
 
 const TCG_API_BASE = 'https://tcg.mik.moe/api/v3';
@@ -35,15 +37,22 @@ function showToast(msg, type = '') {
 
 // POST 方式走 CORS 代理（部分代理只支持 GET 会在此跳过）
 async function fetchViaProxyPost(targetUrl, body) {
+  const custom = (localStorage.getItem('ptcg-relay-url') || '').trim();
+  const proxies = custom
+    ? [(url) => (custom.indexOf('{url}') !== -1 ? custom.replace('{url}', encodeURIComponent(url)) : custom.replace(/\/+$/, '') + '/' + url)].concat(CORS_PROXIES)
+    : CORS_PROXIES;
   const tried = new Set();
-  for (let attempt = 0; attempt < CORS_PROXIES.length; attempt++) {
-    const idx = (workingProxyIdx + attempt) % CORS_PROXIES.length;
+  for (let attempt = 0; attempt < proxies.length; attempt++) {
+    const idx = (workingProxyIdx + attempt) % proxies.length;
     if (tried.has(idx)) continue;
     tried.add(idx);
-    const proxyUrl = CORS_PROXIES[idx](targetUrl);
+    const proxyUrl = proxies[idx](targetUrl);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
     try {
       const resp = await fetch(proxyUrl, {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify(body || {}),
       });
@@ -54,9 +63,11 @@ async function fetchViaProxyPost(targetUrl, body) {
     } catch (e) {
       // 继续尝试下一个代理
       continue;
+    } finally {
+      clearTimeout(timer);
     }
   }
-  throw new Error('所有代理均不可用，请稍后重试');
+  throw new Error('数据中转全部不可用，请稍后重试');
 }
 
 // ============================================================

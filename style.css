@@ -1820,6 +1820,53 @@ body {
 .paste-msg.success { color: var(--accent); }
 .paste-msg.error { color: var(--danger); }
 
+/* 数据中转列表（设置弹窗内） */
+.relay-list {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-input);
+}
+.relay-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.relay-row:last-child { border-bottom: none; }
+.relay-name { color: var(--text); word-break: break-all; }
+.relay-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-dim);
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relay-status.ok { color: var(--accent); font-weight: 600; }
+.relay-status.fail { color: var(--danger); }
+
+/* 个人战绩上方的状态提示 */
+.api-hint {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--bg-input);
+  border-left: 3px solid var(--info);
+  color: var(--text-dim);
+}
+.api-hint.error { border-left-color: var(--danger); color: var(--danger); }
+.api-hint.warn { border-left-color: var(--warning, #e8a33d); color: var(--text); }
+
 /* ============================================================
    域名迁移横幅
    ============================================================ */

@@ -4,12 +4,40 @@
 // ============================================================
 
 const PTCG_BASE = 'https://ptcg.mivm.cn';
-// CORS 代理列表（按优先级尝试）
+// ============================================================
+// CORS 中转（浏览器直连上游 API 会被 CORS 拦截，只能走中转）
+// 2026-09 起原先三个中转全部失效：
+//   proxy.cors.sh  → 域名已注销（DNS 解析失败）
+//   corsproxy.io   → 改为必须 API Key（401）
+//   allorigins     → Cloudflare 520（服务不可用）
+// 现在的顺序：先试上次成功的，再依次回退。
+// 可在「⋮ → 数据中转」里填入自建中转地址（见 RELAY.md）。
+// ============================================================
+const RELAY_STORAGE_KEY = 'ptcg-relay-url';
 const CORS_PROXIES = [
-  (url) => `https://proxy.cors.sh/${url}`,
-  (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  { id: 'isteed', name: 'cors.isteed.cc', build: (url) => `https://cors.isteed.cc/${url}` },
+  { id: 'sirjosh', name: 'workers.dev 中转', build: (url) => `https://cors-get-proxy.sirjosh.workers.dev/?url=${encodeURIComponent(url)}` },
+  { id: 'cors-eu', name: 'cors.eu.org', build: (url) => `https://cors.eu.org/${url}` },
+  { id: 'codetabs', name: 'api.codetabs.com', build: (url) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}` },
+  { id: 'allorigins', name: 'api.allorigins.win', build: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
 ];
+const RELAY_TIMEOUT_MS = 12000; // 单个中转的超时时间
+
+// 自定义中转地址：填前缀（会自动拼完整 URL），或用 {url} 占位符
+function getCustomRelay() {
+  try { return (localStorage.getItem(RELAY_STORAGE_KEY) || '').trim(); } catch (e) { return ''; }
+}
+
+function buildCustomRelayUrl(template, targetUrl) {
+  if (template.indexOf('{url}') !== -1) return template.replace('{url}', encodeURIComponent(targetUrl));
+  return template.replace(/\/+$/, '') + '/' + targetUrl;
+}
+
+function activeProxies() {
+  const custom = getCustomRelay();
+  if (!custom) return CORS_PROXIES;
+  return [{ id: 'custom', name: '自定义中转', build: (url) => buildCustomRelayUrl(custom, url) }].concat(CORS_PROXIES);
+}
 
 const STORAGE_KEY = 'ptcg-tracker-data';
 const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 分钟
@@ -496,38 +524,72 @@ function saveData() {
 // PTCG API 调用 (通过 CORS 代理)
 // ============================================================
 
-async function fetchViaProxy(targetUrl) {
-  // 尝试从上次成功的代理开始
-  const tried = new Set();
-  for (let attempt = 0; attempt < CORS_PROXIES.length; attempt++) {
-    const idx = (workingProxyIdx + attempt) % CORS_PROXIES.length;
-    if (tried.has(idx)) continue;
-    tried.add(idx);
-    const proxyUrl = CORS_PROXIES[idx](targetUrl);
+let lastWorkingRelay = ''; // 最近一次成功的中转名（用于诊断提示）
+
+async function fetchViaProxy(targetUrl, opts) {
+  opts = opts || {};
+  const proxies = activeProxies();
+  const reasons = [];
+
+  // 尝试从上次成功的中转开始，逐个回退
+  for (let attempt = 0; attempt < proxies.length; attempt++) {
+    const idx = (workingProxyIdx + attempt) % proxies.length;
+    const proxy = proxies[idx];
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), opts.timeout || RELAY_TIMEOUT_MS);
     try {
-      const resp = await fetch(proxyUrl, {
-        headers: { 'Accept': 'application/json' },
-      });
-      if (!resp.ok) continue;
-      const data = await resp.json();
-      workingProxyIdx = idx; // 记住可用的代理
+      const init = { signal: controller.signal, headers: { 'Accept': 'application/json' } };
+      if (opts.method === 'POST') {
+        init.method = 'POST';
+        init.headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify(opts.body || {});
+      }
+      const resp = await fetch(proxy.build(targetUrl), init);
+
+      // 上游 404 = 玩家不存在，必须透传，不能当成中转故障
+      if (resp.status === 404 && opts.accept404) {
+        workingProxyIdx = idx;
+        lastWorkingRelay = proxy.name;
+        return { notFound: true };
+      }
+      if (!resp.ok) { reasons.push(`${proxy.name}: HTTP ${resp.status}`); continue; }
+
+      const text = await resp.text();
+      if (!text.trim()) { reasons.push(`${proxy.name}: 返回空内容`); continue; }
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        reasons.push(`${proxy.name}: 返回的不是 JSON`);
+        continue;
+      }
+      workingProxyIdx = idx; // 记住可用的中转
+      lastWorkingRelay = proxy.name;
+      const badge = $('relayStatus');
+      if (badge) badge.textContent = proxy.name;
       return data;
     } catch (e) {
-      // 继续尝试下一个代理
-      continue;
+      const why = (e && e.name === 'AbortError') ? '超时' : ((e && e.message) || '网络错误');
+      reasons.push(`${proxy.name}: ${why}`);
+    } finally {
+      clearTimeout(timer);
     }
   }
-  throw new Error('所有代理均不可用，请稍后重试');
+
+  const err = new Error('数据中转全部不可用');
+  err.reasons = reasons;
+  throw err;
 }
 
 async function fetchPlayer(screenName) {
   const url = `${PTCG_BASE}/api/rank/player/query?screen_name=${encodeURIComponent(screenName)}`;
   try {
-    const data = await fetchViaProxy(url);
+    const data = await fetchViaProxy(url, { accept404: true });
+    if (data && data.notFound) return { notFound: true, name: screenName };
     return data;
   } catch (e) {
-    // 检查是否 404（玩家不存在）
-    return { notFound: true, name: screenName };
+    // 中转故障要和「玩家不存在」区分开，否则界面会误报成未找到
+    return { error: e.message || '查询失败', name: screenName, reasons: e.reasons || [] };
   }
 }
 
@@ -630,8 +692,12 @@ async function refreshData() {
 
     let msg = `更新完成: ${valid.length} 个成功`;
     if (notFound.length > 0) msg += `, ${notFound.length} 个未找到`;
-    if (errors.length > 0) msg += `, ${errors.length} 个失败`;
-    showToast(msg, 'success');
+    if (errors.length > 0) msg += `, ${errors.length} 个获取失败`;
+    if (valid.length === 0 && errors.length > 0) {
+      showToast(msg + ' — 数据中转可能已失效，可在「⋮ → 数据中转」检测', 'error');
+    } else {
+      showToast(msg, 'success');
+    }
   } catch (e) {
     showToast('更新失败: ' + e.message, 'error');
   } finally {
@@ -885,6 +951,7 @@ async function refreshApiOverview() {
     $('apiWinRate').textContent = '--'; $('apiTotalGames').textContent = '--';
   };
   defaults();
+  setApiHint('');
   try {
     const [data, tops] = await Promise.all([
       fetchPlayer(p.playerName),
@@ -955,9 +1022,19 @@ async function refreshApiOverview() {
       renderHistory();
       renderMatchupAnalysis();
       showToast('战绩已获取，已自动分配差额', 'success');
+    } else if (data && data.error) {
+      const detail = (data.reasons && data.reasons.length) ? '（' + data.reasons.join('；') + '）' : '';
+      setApiHint('⚠️ 获取战绩失败：' + data.error + detail + ' — 可在「⋮ → 数据中转」检测可用的中转。', 'error');
+      showToast('获取战绩失败：' + data.error, 'error');
+    } else if (data && data.notFound) {
+      setApiHint('⚠️ 未查询到玩家「' + p.playerName + '」的排位数据：昵称需与游戏内完全一致，且该账号至少打过一场排位。', 'warn');
+      showToast('未查询到该玩家的排位数据', 'error');
+    } else {
+      setApiHint('⚠️ 数据获取异常，请稍后重试。', 'warn');
     }
   } catch (e) {
     console.warn('获取个人 API 数据失败:', e);
+    setApiHint('⚠️ 获取战绩失败：' + e.message, 'error');
     showToast('获取数据失败: ' + e.message, 'error');
   }
 }
@@ -2051,6 +2128,16 @@ function showToast(msg, type = '') {
   toast._timer = setTimeout(() => { toast.style.display = 'none'; }, 3000);
 }
 
+// 个人战绩上方的状态提示（中转故障 / 玩家不存在时给出明确原因）
+function setApiHint(msg, type) {
+  const el = $('apiHint');
+  if (!el) return;
+  if (!msg) { el.style.display = 'none'; el.textContent = ''; el.className = 'api-hint'; return; }
+  el.textContent = msg;
+  el.className = 'api-hint ' + (type || 'warn');
+  el.style.display = 'block';
+}
+
 function showLoading(text) {
   loadingText.textContent = text;
   loadingOverlay.style.display = 'flex';
@@ -2207,6 +2294,101 @@ $('importBtn').addEventListener('click', () => {
 $('clearBtn').addEventListener('click', () => {
   menuDropdown.style.display = 'none';
   clearAllData();
+});
+
+// ============================================================
+// 数据中转：设置自建中转 + 一键检测
+// ============================================================
+
+function renderRelayList(items, results) {
+  const box = $('relayList');
+  if (!box) return;
+  box.innerHTML = items.map((p) => {
+    let status = '<span class="relay-status unknown">未检测</span>';
+    const r = results && results[p.id];
+    if (r) {
+      status = r.ok
+        ? `<span class="relay-status ok">✓ ${r.ms}ms</span>`
+        : `<span class="relay-status fail" title="${esc(r.err || '')}">✕ ${esc(String(r.err || '失败').slice(0, 24))}</span>`;
+    }
+    return `<div class="relay-row"><span class="relay-name">${esc(p.name)}${p.id === 'custom' ? '（自建）' : ''}</span>${status}</div>`;
+  }).join('');
+}
+
+function openRelayModal() {
+  $('customRelayInput').value = getCustomRelay();
+  $('relayMsg').textContent = '';
+  $('relayMsg').className = 'paste-msg';
+  renderRelayList(activeProxies(), null);
+  $('relayModal').style.display = 'flex';
+}
+
+function closeRelayModal() {
+  $('relayModal').style.display = 'none';
+}
+
+function saveCustomRelay() {
+  const v = $('customRelayInput').value.trim();
+  try {
+    if (v) localStorage.setItem(RELAY_STORAGE_KEY, v);
+    else localStorage.removeItem(RELAY_STORAGE_KEY);
+  } catch (e) {
+    /* localStorage 不可用时忽略 */
+  }
+  workingProxyIdx = 0;
+  renderRelayList(activeProxies(), null);
+  $('relayMsg').textContent = v ? '已保存，将优先使用这个中转' : '已清空，使用默认中转列表';
+  $('relayMsg').className = 'paste-msg success';
+}
+
+async function testRelays() {
+  const items = activeProxies();
+  const results = {};
+  const url = `${PTCG_BASE}/api/rank/player/tops`;
+  $('relayTestBtn').disabled = true;
+  $('relayMsg').textContent = '检测中…（每个中转最多等待 12 秒）';
+  $('relayMsg').className = 'paste-msg';
+
+  for (const p of items) {
+    renderRelayList(items, results);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
+    const t0 = Date.now();
+    try {
+      const resp = await fetch(p.build(url), { signal: controller.signal, headers: { Accept: 'application/json' } });
+      const text = await resp.text();
+      if (!resp.ok) results[p.id] = { ok: false, err: 'HTTP ' + resp.status };
+      else if (!text.trim()) results[p.id] = { ok: false, err: '空响应' };
+      else { JSON.parse(text); results[p.id] = { ok: true, ms: Date.now() - t0 }; }
+    } catch (e) {
+      const why = (e && e.name === 'AbortError') ? '超时' : ((e && e.message) || '网络错误');
+      results[p.id] = { ok: false, err: why };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  renderRelayList(items, results);
+
+  const okList = items.filter((p) => results[p.id] && results[p.id].ok);
+  if (okList.length) {
+    $('relayMsg').textContent = `可用中转 ${okList.length} 个：${okList.map((p) => p.name).join('、')}`;
+    $('relayMsg').className = 'paste-msg success';
+  } else {
+    $('relayMsg').textContent = '公共中转全部不可用。建议按 RELAY.md 自建一个中转后填在上方。';
+    $('relayMsg').className = 'paste-msg error';
+  }
+  $('relayTestBtn').disabled = false;
+}
+
+$('relayMenuBtn').addEventListener('click', () => {
+  menuDropdown.style.display = 'none';
+  openRelayModal();
+});
+$('relayModalClose').addEventListener('click', closeRelayModal);
+$('relayTestBtn').addEventListener('click', testRelays);
+$('relaySaveBtn').addEventListener('click', saveCustomRelay);
+$('relayModal').addEventListener('click', (e) => {
+  if (e.target === $('relayModal')) closeRelayModal();
 });
 
 // 头部直接可见的导出/导入按钮
