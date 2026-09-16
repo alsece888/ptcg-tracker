@@ -13,11 +13,101 @@ const CORS_PROXIES = [
 
 const TCG_API_BASE = 'https://tcg.mik.moe/api/v3';
 const TCG_IMG_BASE = 'https://tcg.mik.moe/static/img';
+const POKEMON_TCG_IMG_BASE = 'https://images.pokemontcg.io'; // 公开卡图 CDN（按英文 set 编号）
+const IMG_BASE_KEY = 'ptcg-img-base';       // 可自定义图床前缀（留空用默认）
+const IMG_PATTERN_KEY = 'ptcg-img-pattern'; // 记住上次成功的地址模式，避免每张卡都重试
 const DECK_BUILDER_KEY = 'ptcg-deck-builder-data';
 
 const $ = (id) => document.getElementById(id);
 const toast = $('toast');
 let workingProxyIdx = 0; // 当前可用的代理索引
+
+// ============================================================
+// 卡图地址：完全由卡组代码里的卡牌信息推导，不依赖第三方 API
+// 同一个卡可能有多种可用地址（中文版 set / 英文版 set × png / webp），
+// 浏览器按顺序尝试，命中后记住该模式，后续卡牌优先使用它。
+// ============================================================
+
+function imgBase() {
+  try {
+    const custom = (localStorage.getItem(IMG_BASE_KEY) || '').trim();
+    return custom ? custom.replace(/\/+$/, '') : TCG_IMG_BASE;
+  } catch (e) {
+    return TCG_IMG_BASE;
+  }
+}
+
+function rememberedPattern() {
+  try { return localStorage.getItem(IMG_PATTERN_KEY) || ''; } catch (e) { return ''; }
+}
+
+function rememberPattern(id) {
+  try { if (id) localStorage.setItem(IMG_PATTERN_KEY, id); } catch (e) { /* 忽略 */ }
+}
+
+// 用卡组代码里的英文 set 缩写 + 编号，直接拼出公开 CDN 的卡图地址（离线映射，无需接口）
+function pokemonTcgImgUrls(c) {
+  const map = window.PTCG_SET_ID_MAP || {};
+  const idsRaw = map[String(c.setEn || '').toUpperCase()];
+  if (!idsRaw) return [];
+  const ids = Array.isArray(idsRaw) ? idsRaw : [idsRaw];
+  const num = String(c.numberEn || '').replace(/^0+(?=\d)/, '');
+  if (!num) return [];
+  const urls = [];
+  ids.forEach((id) => urls.push({ id: `ptcg-${id}-png`, url: `${POKEMON_TCG_IMG_BASE}/${id}/${num}.png` }));
+  ids.forEach((id) => urls.push({ id: `ptcg-${id}-hires`, url: `${POKEMON_TCG_IMG_BASE}/${id}/${num}_hires.png` }));
+  return urls;
+}
+
+// 返回 [{ id, url }]，按「上次成功 → 中文版 → 英文版」的顺序
+function cardImgPatterns(c) {
+  const base = imgBase();
+  const list = [];
+  const push = (id, url) => {
+    if (!url || !id) return;
+    if (list.some((p) => p.url === url)) return;
+    list.push({ id, url });
+  };
+
+  if (c.img) push('legacy', c.img);
+  if (c.set && c.number) {
+    push('cn-png', `${base}/${c.set}/${c.number}.png`);
+    push('cn-webp', `${base}/${c.set}/${c.number}.webp`);
+  }
+  // 公开 CDN 兜底：只要卡组代码里有英文 set 缩写就能出图，不依赖任何接口
+  pokemonTcgImgUrls(c).forEach((p) => push(p.id, p.url));
+  if (c.setEn && c.numberEn) {
+    push('en-png', `${base}/${c.setEn}/${c.numberEn}.png`);
+    push('en-webp', `${base}/${c.setEn}/${c.numberEn}.webp`);
+  }
+
+  const mem = rememberedPattern();
+  if (mem) {
+    const i = list.findIndex((p) => p.id === mem);
+    if (i > 0) list.unshift(list.splice(i, 1)[0]);
+  }
+  return list;
+}
+
+// 卡图加载失败时自动换下一个候选地址，全部失败才显示文字兜底
+function onCardImgError(img) {
+  const rest = (img.getAttribute('data-alt-src') || '').split('|').filter(Boolean);
+  if (rest.length) {
+    img.setAttribute('data-alt-src', rest.slice(1).join('|'));
+    img.src = rest[0];
+    return;
+  }
+  const tile = img.closest('.deck-card-tile');
+  if (tile) tile.classList.add('img-error');
+}
+
+function onCardImgLoad(img) {
+  const id = img.getAttribute('data-pattern');
+  if (id) rememberPattern(id);
+}
+
+window.onCardImgError = onCardImgError;
+window.onCardImgLoad = onCardImgLoad;
 
 // ============================================================
 // 工具函数
@@ -204,7 +294,7 @@ async function importDeck() {
         setEn: c.setCodeEn || '',
         numberEn: c.cardIndexEn || '',
         count: c.count || 1,
-        img: set && number ? `${TCG_IMG_BASE}/${set}/${number}.png` : '',
+        img: set && number ? `${imgBase()}/${set}/${number}.png` : '',
         type: c.cardType || '',
       };
     });
@@ -227,12 +317,13 @@ async function importDeck() {
         key: hit ? `${hit.set}|${hit.number}` : `en|${en.set}|${en.number}`,
         name: en.name,
         nameEn: en.name,
-        set: hit ? hit.set : en.set,
-        number: hit ? hit.number : en.number,
+        // 中文版 set 只有 API/缓存里才有；拿不到也没关系，卡图会用英文版 set 兜底
+        set: hit ? hit.set : '',
+        number: hit ? hit.number : '',
         setEn: en.set,
         numberEn: en.number,
         count: en.count,
-        img: hit ? `${TCG_IMG_BASE}/${hit.set}/${hit.number}.png` : '',
+        img: '',
         type: '',
       };
     });
@@ -244,7 +335,7 @@ async function importDeck() {
   msg.className = 'add-result success';
   msg.textContent = `导入成功：共 ${cards.length} 种 / ${total} 张`;
   if (!apiCards) {
-    msg.textContent += '（按文本生成；保留代码中的"小程序卡组ID"行可获取卡图）';
+    msg.textContent += '（按文本生成，卡图按代码里的 set/编号 自动匹配）';
   }
   showToast('卡组导入成功', 'success');
 }
@@ -321,12 +412,13 @@ function renderCardGrid(deck) {
   $('deckCardGrid').innerHTML = visible.map(c => {
     const o = owned[c.key] || 0;
     const complete = o >= c.count;
-    const cls = (complete ? 'complete' : (o > 0 ? 'partial' : 'missing')) + (c.img ? '' : ' img-error');
+    const patterns = cardImgPatterns(c);
+    const cls = (complete ? 'complete' : (o > 0 ? 'partial' : 'missing')) + (patterns.length ? '' : ' img-error');
     const setLabel = (c.setEn || c.set) && (c.numberEn || c.number)
       ? `${esc(c.setEn || c.set)} ${esc(c.numberEn || c.number)}`
       : '';
-    const imgHtml = c.img
-      ? `<img src="${esc(c.img)}" alt="${esc(c.name)}" loading="lazy" onerror="this.closest('.deck-card-tile').classList.add('img-error')">`
+    const imgHtml = patterns.length
+      ? `<img src="${esc(patterns[0].url)}" data-pattern="${esc(patterns[0].id)}" data-alt-src="${esc(patterns.slice(1).map(p => p.url).join('|'))}" alt="${esc(c.name)}" loading="lazy" referrerpolicy="no-referrer" onload="onCardImgLoad(this)" onerror="onCardImgError(this)">`
       : `<div class="deck-card-text-fallback">${esc(c.name)}</div>`;
     return `<div class="deck-card-tile ${cls}" data-key="${esc(c.key)}">
       <div class="deck-card-img-wrap" data-key="${esc(c.key)}" onclick="onDeckCardClick(event)">
