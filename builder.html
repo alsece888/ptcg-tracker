@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>组卡 - PTCG 玩家追踪器</title>
   <meta name="description" content="导入 tcg.mik.moe 卡组代码，统计实体卡持有情况">
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
 </head>
 <body>
@@ -49,6 +49,16 @@
           </div>
         </div>
         <div id="deckBuilderStats" class="deck-builder-stats"></div>
+        <div class="deck-toolbar">
+          <div id="deckTypeFilter" class="deck-type-filter" role="group" aria-label="按卡牌类型筛选"></div>
+          <div id="deckSortButtons" class="deck-sort-group" role="group" aria-label="排序方式">
+            <span class="deck-toolbar-label">排序</span>
+            <button type="button" class="deck-sort-btn" data-sort="default" title="按导入时的原始顺序排列">默认顺序</button>
+            <button type="button" class="deck-sort-btn" data-sort="type" title="按 宝可梦 → 训练家 → 能量 分组，组内按卡牌名称排序">按类型</button>
+            <button type="button" class="deck-sort-btn" data-sort="name" title="按卡牌名称排序">按名称</button>
+          </div>
+        </div>
+        <div id="deckTypeHint" class="deck-type-hint" style="display:none;"></div>
         <div id="deckCardGrid" class="deck-card-grid"></div>
         <div class="deck-builder-breakdown">
           <div class="deck-builder-breakdown-header">
@@ -73,6 +83,6 @@
   <div id="toast" class="toast" style="display:none;"></div>
 
   <script src="card-sets.js?v=16"></script>
-  <script src="builder.js?v=17"></script>
+  <script src="builder.js?v=18"></script>
 </body>
 </html>

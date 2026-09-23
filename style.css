@@ -2283,6 +2283,174 @@ body {
 .deck-card-counts b { color: var(--accent); }
 .deck-card-tile.missing .deck-card-counts b { color: var(--warning); }
 
+/* 卡牌类型筛选 + 一键排序工具栏 */
+.deck-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.deck-type-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.deck-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+
+.deck-chip:hover { border-color: var(--border-hover); color: var(--text); }
+
+.deck-chip.is-active {
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.deck-chip .chip-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-muted);
+}
+
+.deck-chip.is-active .chip-count { background: var(--primary); color: #fff; }
+
+.deck-sort-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.deck-toolbar-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.deck-sort-btn {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+
+.deck-sort-btn:hover { border-color: var(--border-hover); color: var(--text); }
+
+.deck-sort-btn.is-active {
+  background: var(--info);
+  border-color: var(--info);
+  color: #fff;
+  font-weight: 600;
+}
+
+.deck-type-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--warning);
+  background: var(--warning-dim);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+
+/* 按类型排序时的分组标题（占满整行） */
+.deck-type-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 2px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.deck-type-header-count {
+  font-size: 11px;
+  font-weight: 400;
+  font-family: var(--mono);
+  color: var(--text-muted);
+}
+
+.deck-type-header-name::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.deck-type-header.type-pokemon .deck-type-header-name::before { background: var(--primary); }
+.deck-type-header.type-trainer .deck-type-header-name::before { background: var(--info); }
+.deck-type-header.type-energy .deck-type-header-name::before { background: var(--warning); }
+
+/* 卡图右上角的类型角标 */
+.deck-type-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.62);
+  pointer-events: none;
+}
+
+.deck-type-badge.type-pokemon { background: rgba(233, 69, 96, 0.9); }
+.deck-type-badge.type-trainer { background: rgba(59, 109, 233, 0.9); }
+.deck-type-badge.type-energy { background: rgba(245, 166, 35, 0.92); }
+
+/* 结果统计行前的类型标签 */
+.breakdown-type {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--text-muted);
+  white-space: nowrap;
+}
+
+.breakdown-type.type-pokemon { background: var(--primary); }
+.breakdown-type.type-trainer { background: var(--info); }
+.breakdown-type.type-energy { background: var(--warning); }
+
+.deck-grid-empty {
+  grid-column: 1 / -1;
+  padding: 22px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
 /* 结果统计 */
 .deck-builder-breakdown {
   background: var(--bg-card);
@@ -2584,4 +2752,51 @@ body {
 
   .breakdown-counts { font-size: 12px; }
   .breakdown-bar { display: none; }
+}
+
+/* ============================================================
+   组卡页：类型筛选 / 排序工具栏（移动端）
+   ============================================================ */
+@media (max-width: 768px) {
+  .deck-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .deck-type-filter {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .deck-type-filter::-webkit-scrollbar { display: none; }
+
+  .deck-chip {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .deck-chip .chip-count { font-size: 10px; padding: 1px 5px; }
+
+  .deck-sort-group { gap: 6px; }
+
+  .deck-sort-btn {
+    flex: 1;
+    min-height: 38px;
+    padding: 6px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .deck-toolbar-label { display: none; }
+  .deck-sort-btn { font-size: 12px; }
+  .breakdown-type { display: none; }
+  .deck-type-badge { font-size: 10px; padding: 2px 6px; }
 }

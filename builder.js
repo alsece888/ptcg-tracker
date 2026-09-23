@@ -164,14 +164,14 @@ async function fetchViaProxyPost(targetUrl, body) {
 // 组卡状态
 // ============================================================
 
-let deckBuilder = { decks: [], currentDeckId: null, owned: {}, cache: {} };
+let deckBuilder = { decks: [], currentDeckId: null, owned: {}, cache: {}, ui: { sort: 'default', type: 'all' } };
 
 function loadDeckBuilder() {
   try {
     const raw = localStorage.getItem(DECK_BUILDER_KEY);
     if (raw) {
       const data = JSON.parse(raw);
-      deckBuilder = Object.assign({ decks: [], currentDeckId: null, owned: {}, cache: {} }, data);
+      deckBuilder = Object.assign({ decks: [], currentDeckId: null, owned: {}, cache: {}, ui: { sort: 'default', type: 'all' } }, data);
       if (!Array.isArray(deckBuilder.decks)) deckBuilder.decks = [];
       if (deckBuilder.decks.length && !deckBuilder.decks.some(d => d.id === deckBuilder.currentDeckId)) {
         deckBuilder.currentDeckId = deckBuilder.decks[0].id;
@@ -356,6 +356,146 @@ function addDeckToBuilder(cards, title) {
   $('deckCodeInput').value = '';
 }
 
+// ============================================================
+// 卡牌类型分类 / 筛选 / 排序
+// ============================================================
+
+// tcg.mik.moe 返回的 cardType 是英文枚举：
+// Pokemon / Supporter / Item / Tool / Stadium / Basic Energy / Special Energy ...
+const CARD_TYPE_ORDER = ['pokemon', 'trainer', 'energy', 'unknown'];
+const CARD_TYPE_LABEL = { pokemon: '宝可梦', trainer: '训练家', energy: '能量', unknown: '未识别' };
+const DECK_SORT_MODES = ['default', 'type', 'name'];
+
+let nameCollator = null;
+function compareCardName(a, b) {
+  const an = String(a == null ? '' : a);
+  const bn = String(b == null ? '' : b);
+  if (nameCollator === null) {
+    try {
+      nameCollator = new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' });
+    } catch (e) {
+      nameCollator = false; // 不支持时退化为 localeCompare
+    }
+  }
+  if (nameCollator) return nameCollator.compare(an, bn);
+  return an.localeCompare(bn);
+}
+
+// 归类到 宝可梦 / 训练家 / 能量；接口没给类型时（纯文本导入）按卡名兜底
+function cardTypeKey(card) {
+  const raw = String((card && card.type) || '').trim();
+  if (raw) {
+    const low = raw.toLowerCase();
+    if (low.indexOf('energy') !== -1 || raw.indexOf('能量') !== -1) return 'energy';
+    if (low.indexOf('pokemon') !== -1 || low.indexOf('pokémon') !== -1 || raw.indexOf('宝可梦') !== -1) return 'pokemon';
+    if (low.indexOf('trainer') !== -1 || raw.indexOf('训练家') !== -1) return 'trainer';
+    // 支援者 / 物品 / 宝可梦道具 / 竞技场 等都算训练家
+    if (/supporter|item|tool|stadium|竞技场|支援者|物品|道具/.test(low + ' ' + raw)) return 'trainer';
+  }
+  const name = String((card && card.name) || '').trim();
+  // 兜底：以"能量"/"Energy"结尾的几乎都是能量卡（Energy Switch 这类训练家不会结尾）
+  if (/能量$/.test(name) || /energ(y|ies)$/i.test(name)) return 'energy';
+  return 'unknown';
+}
+
+function cardTypeLabel(card) {
+  return CARD_TYPE_LABEL[cardTypeKey(card)] || CARD_TYPE_LABEL.unknown;
+}
+
+// 筛选 / 排序状态（跟随组卡数据一起保存在本地）
+function deckUi() {
+  if (!deckBuilder.ui || typeof deckBuilder.ui !== 'object') deckBuilder.ui = {};
+  if (DECK_SORT_MODES.indexOf(deckBuilder.ui.sort) === -1) deckBuilder.ui.sort = 'default';
+  if (deckBuilder.ui.type !== 'all' && CARD_TYPE_ORDER.indexOf(deckBuilder.ui.type) === -1) deckBuilder.ui.type = 'all';
+  return deckBuilder.ui;
+}
+
+function setDeckUi(patch) {
+  Object.assign(deckUi(), patch);
+  saveDeckBuilder();
+  const deck = currentDeck();
+  if (!deck) return;
+  renderDeckToolbar(deck);
+  renderCardGrid(deck);
+  renderBreakdown(deck);
+}
+
+// default = 导入顺序；type = 类型分组（组内按名称）；name = 按名称
+function sortDeckCards(cards, mode) {
+  const list = cards.slice();
+  if (mode === 'name') {
+    list.sort((a, b) => compareCardName(a.name, b.name) || compareCardName(a.setEn || a.set, b.setEn || b.set));
+  } else if (mode === 'type') {
+    list.sort((a, b) => {
+      const d = CARD_TYPE_ORDER.indexOf(cardTypeKey(a)) - CARD_TYPE_ORDER.indexOf(cardTypeKey(b));
+      if (d) return d;
+      return compareCardName(a.name, b.name) || compareCardName(a.setEn || a.set, b.setEn || b.set);
+    });
+  }
+  return list;
+}
+
+function renderDeckToolbar(deck) {
+  const ui = deckUi();
+  const counts = { all: 0 };
+  CARD_TYPE_ORDER.forEach(k => { counts[k] = 0; });
+  deck.cards.forEach(c => {
+    counts[cardTypeKey(c)] += c.count;
+    counts.all += c.count;
+  });
+
+  const shown = ['all'].concat(CARD_TYPE_ORDER.filter(k => k !== 'unknown' || counts.unknown > 0));
+  $('deckTypeFilter').innerHTML = shown.map(k => {
+    const label = k === 'all' ? '全部' : CARD_TYPE_LABEL[k];
+    const active = ui.type === k ? ' is-active' : '';
+    return `<button type="button" class="deck-chip${active}" data-type="${k}" aria-pressed="${ui.type === k ? 'true' : 'false'}">${label}<span class="chip-count">${counts[k]}</span></button>`;
+  }).join('');
+
+  document.querySelectorAll('#deckSortButtons .deck-sort-btn').forEach(btn => {
+    const on = btn.getAttribute('data-sort') === ui.sort;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+
+  const hint = $('deckTypeHint');
+  if (counts.unknown > 0) {
+    hint.style.display = 'block';
+    hint.textContent = `⚠️ 有 ${counts.unknown} 张卡牌类型未识别（纯文本导入的卡组拿不到类型信息），已归入「未识别」并排在最后。`;
+  } else {
+    hint.style.display = 'none';
+    hint.textContent = '';
+  }
+}
+
+function deckCardTileHtml(c, owned) {
+  const o = owned[c.key] || 0;
+  const complete = o >= c.count;
+  const patterns = cardImgPatterns(c);
+  const cls = (complete ? 'complete' : (o > 0 ? 'partial' : 'missing')) + (patterns.length ? '' : ' img-error');
+  const setLabel = (c.setEn || c.set) && (c.numberEn || c.number)
+    ? `${esc(c.setEn || c.set)} ${esc(c.numberEn || c.number)}`
+    : '';
+  const typeKey = cardTypeKey(c);
+  const imgHtml = patterns.length
+    ? `<img src="${esc(patterns[0].url)}" data-pattern="${esc(patterns[0].id)}" data-alt-src="${esc(patterns.slice(1).map(p => p.url).join('|'))}" alt="${esc(c.name)}" loading="lazy" referrerpolicy="no-referrer" onload="onCardImgLoad(this)" onerror="onCardImgError(this)">`
+    : `<div class="deck-card-text-fallback">${esc(c.name)}</div>`;
+  return `<div class="deck-card-tile ${cls}" data-key="${esc(c.key)}">
+      <div class="deck-card-img-wrap" data-key="${esc(c.key)}" onclick="onDeckCardClick(event)">
+        ${imgHtml}
+        <span class="deck-owned-badge ${complete ? 'ok' : ''}">持有 ${o}/${c.count}</span>
+        <span class="deck-type-badge type-${typeKey}">${CARD_TYPE_LABEL[typeKey]}</span>
+        <div class="deck-card-zone zone-plus">＋</div>
+        <div class="deck-card-zone zone-minus">－</div>
+        <div class="deck-card-zone-divider"></div>
+      </div>
+      <div class="deck-card-info">
+        <span class="deck-card-name">${esc(c.name)}</span>
+        ${setLabel ? `<span class="deck-card-set">${setLabel}${c.type ? ' · ' + esc(c.type) : ''}</span>` : ''}
+        <span class="deck-card-counts">已有 <b>${o}</b> / 需要 ${c.count}${complete ? ' ✓ 已齐' : ''}</span>
+      </div>
+    </div>`;
+}
+
 function renderDeckBuilder() {
   const deck = currentDeck();
   const hasDeck = !!deck;
@@ -367,6 +507,7 @@ function renderDeckBuilder() {
   $('deckBuilderTitle').textContent = deck.title;
   renderDeckSelector();
   renderDeckBuilderStats(deck);
+  renderDeckToolbar(deck);
   renderCardGrid(deck);
   renderBreakdown(deck);
 }
@@ -408,33 +549,35 @@ function renderDeckBuilderStats(deck) {
 function renderCardGrid(deck) {
   const owned = deckBuilder.owned[deck.id] || {};
   const onlyMissing = $('onlyMissingToggle').checked;
-  const visible = deck.cards.filter(c => !onlyMissing || (owned[c.key] || 0) < c.count);
-  $('deckCardGrid').innerHTML = visible.map(c => {
-    const o = owned[c.key] || 0;
-    const complete = o >= c.count;
-    const patterns = cardImgPatterns(c);
-    const cls = (complete ? 'complete' : (o > 0 ? 'partial' : 'missing')) + (patterns.length ? '' : ' img-error');
-    const setLabel = (c.setEn || c.set) && (c.numberEn || c.number)
-      ? `${esc(c.setEn || c.set)} ${esc(c.numberEn || c.number)}`
-      : '';
-    const imgHtml = patterns.length
-      ? `<img src="${esc(patterns[0].url)}" data-pattern="${esc(patterns[0].id)}" data-alt-src="${esc(patterns.slice(1).map(p => p.url).join('|'))}" alt="${esc(c.name)}" loading="lazy" referrerpolicy="no-referrer" onload="onCardImgLoad(this)" onerror="onCardImgError(this)">`
-      : `<div class="deck-card-text-fallback">${esc(c.name)}</div>`;
-    return `<div class="deck-card-tile ${cls}" data-key="${esc(c.key)}">
-      <div class="deck-card-img-wrap" data-key="${esc(c.key)}" onclick="onDeckCardClick(event)">
-        ${imgHtml}
-        <span class="deck-owned-badge ${complete ? 'ok' : ''}">持有 ${o}/${c.count}</span>
-        <div class="deck-card-zone zone-plus">＋</div>
-        <div class="deck-card-zone zone-minus">－</div>
-        <div class="deck-card-zone-divider"></div>
-      </div>
-      <div class="deck-card-info">
-        <span class="deck-card-name">${esc(c.name)}</span>
-        ${setLabel ? `<span class="deck-card-set">${setLabel}${c.type ? ' · ' + esc(c.type) : ''}</span>` : ''}
-        <span class="deck-card-counts">已有 <b>${o}</b> / 需要 ${c.count}${complete ? ' ✓ 已齐' : ''}</span>
-      </div>
-    </div>`;
-  }).join('');
+  const ui = deckUi();
+  let visible = deck.cards.filter(c => !onlyMissing || (owned[c.key] || 0) < c.count);
+  if (ui.type !== 'all') visible = visible.filter(c => cardTypeKey(c) === ui.type);
+  const list = sortDeckCards(visible, ui.sort);
+
+  const groupTotals = {};
+  list.forEach(c => {
+    const k = cardTypeKey(c);
+    if (!groupTotals[k]) groupTotals[k] = { kinds: 0, cards: 0 };
+    groupTotals[k].kinds += 1;
+    groupTotals[k].cards += c.count;
+  });
+
+  let html = '';
+  let lastType = null;
+  list.forEach(c => {
+    const tk = cardTypeKey(c);
+    if (ui.sort === 'type' && tk !== lastType) {
+      lastType = tk;
+      const t = groupTotals[tk];
+      html += `<div class="deck-type-header type-${tk}">
+        <span class="deck-type-header-name">${CARD_TYPE_LABEL[tk]}</span>
+        <span class="deck-type-header-count">${t.kinds} 种 · ${t.cards} 张</span>
+      </div>`;
+    }
+    html += deckCardTileHtml(c, owned);
+  });
+
+  $('deckCardGrid').innerHTML = html || '<div class="deck-grid-empty">当前筛选条件下没有卡牌</div>';
 }
 
 // 点击卡牌：左 70% +1，右 30% -1
@@ -465,9 +608,11 @@ function onDeckCardClick(e) {
 function renderBreakdown(deck) {
   const owned = deckBuilder.owned[deck.id] || {};
   const onlyMissing = $('onlyMissingToggle').checked;
-  const rows = deck.cards.map(c => {
+  const ui = deckUi();
+  let rows = deck.cards.map(c => {
     const o = owned[c.key] || 0;
     return {
+      typeKey: cardTypeKey(c),
       name: c.name,
       o,
       need: c.count,
@@ -476,15 +621,29 @@ function renderBreakdown(deck) {
       number: c.numberEn || c.number,
     };
   });
-  rows.sort((a, b) => b.missing - a.missing || b.need - a.need);
+  if (ui.type !== 'all') rows = rows.filter(r => r.typeKey === ui.type);
+  if (ui.sort === 'name') {
+    rows.sort((a, b) => compareCardName(a.name, b.name));
+  } else if (ui.sort === 'type') {
+    rows.sort((a, b) => {
+      const d = CARD_TYPE_ORDER.indexOf(a.typeKey) - CARD_TYPE_ORDER.indexOf(b.typeKey);
+      return d || compareCardName(a.name, b.name);
+    });
+  } else {
+    rows.sort((a, b) => b.missing - a.missing || b.need - a.need);
+  }
   const filtered = onlyMissing ? rows.filter(r => r.missing > 0) : rows;
   if (!filtered.length) {
-    $('deckBreakdownBody').innerHTML = '<div class="deck-breakdown-empty">🎉 所有卡牌都已集齐，可以直接组卡！</div>';
+    const emptyText = ui.type !== 'all'
+      ? '当前类型筛选下没有卡牌'
+      : (onlyMissing ? '🎉 所有卡牌都已集齐，可以直接组卡！' : '当前没有可显示的卡牌');
+    $('deckBreakdownBody').innerHTML = `<div class="deck-breakdown-empty">${emptyText}</div>`;
     return;
   }
   $('deckBreakdownBody').innerHTML = filtered.map(r => {
     const pct = Math.min(100, Math.round((r.o / r.need) * 100));
     return `<div class="deck-breakdown-row ${r.missing > 0 ? 'missing' : ''}">
+      <span class="breakdown-type type-${r.typeKey}">${CARD_TYPE_LABEL[r.typeKey]}</span>
       <span class="breakdown-name">${esc(r.name)}</span>
       <div class="breakdown-bar"><div class="breakdown-bar-fill" style="width:${pct}%"></div></div>
       <span class="breakdown-counts">${r.o}/${r.need}</span>
@@ -564,6 +723,21 @@ $('deckBuilderSelector').addEventListener('change', (e) => {
   deckBuilder.currentDeckId = e.target.value;
   saveDeckBuilder();
   renderDeckBuilder();
+});
+// 类型筛选（宝可梦 / 训练家 / 能量）+ 一键排序
+$('deckTypeFilter').addEventListener('click', (e) => {
+  const btn = e.target.closest('.deck-chip');
+  if (!btn) return;
+  const type = btn.getAttribute('data-type');
+  if (!type || deckUi().type === type) return;
+  setDeckUi({ type });
+});
+$('deckSortButtons').addEventListener('click', (e) => {
+  const btn = e.target.closest('.deck-sort-btn');
+  if (!btn) return;
+  const sort = btn.getAttribute('data-sort');
+  if (!sort || deckUi().sort === sort) return;
+  setDeckUi({ sort });
 });
 $('onlyMissingToggle').addEventListener('change', () => {
   const deck = currentDeck();
