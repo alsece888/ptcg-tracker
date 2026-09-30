@@ -432,6 +432,8 @@ let state = {
   watchlist: [], lastUpdate: null, players: {}, notes: {},
   personal: { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null }
 };
+// 本窗口上次读到/写入的数据副本，交给 PtcgStore 判断「我改了什么」
+let lastWrittenState = null;
 let currentSort = 'exp';
 let editingNote = null;
 let editingHistoryId = null;
@@ -468,9 +470,11 @@ const mobileList = $('mobilePlayerList');
 
 function loadData() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const data = JSON.parse(raw);
+    // 统一走 PtcgStore：它负责规范化、合并和「历史记录找回」
+    const data = window.PtcgStore
+      ? PtcgStore.read()
+      : (() => { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null; })();
+    if (data) {
       state = {
         watchlist: data.watchlist || [],
         lastUpdate: data.lastUpdate || null,
@@ -495,17 +499,17 @@ function loadData() {
             migrated = true;
           }
         });
-        // 迁移旧版历史记录格式
-        if (state.personal.matchHistory) {
-          state.personal.matchHistory = state.personal.matchHistory.filter(h => {
-            if (h.result !== undefined && h.deltaWins === undefined) {
-              // 旧版手动记录无法迁移为差分格式，丢弃
-              return false;
-            }
-            return true;
-          });
-        }
         if (migrated) saveData();
+      }
+      // 记下本窗口的基线：之后 saveData 时据此判断哪些记录是本窗口新加/改过的
+      if (window.PtcgStore) {
+        lastWrittenState = PtcgStore.normalize(JSON.parse(JSON.stringify(state)));
+        // 万一某条记录被别的窗口整份覆盖掉了，从日志里补回来
+        const found = PtcgStore.recoverHistory(state);
+        if (found > 0) {
+          saveData();
+          showToast(`已从备份日志找回 ${found} 条对局记录`, 'success');
+        }
       }
     }
     // 注入默认卡组图鉴：新用户或未设置卡组的用户首次加载时自动填充
@@ -522,15 +526,35 @@ function loadData() {
   }
 }
 
-function saveData() {
+// 把存储里的数据同步到内存 state（写入后用它保持界面与存储一致）
+function stateFromStore(d) {
+  return {
+    watchlist: d.watchlist || [],
+    lastUpdate: d.lastUpdate || null,
+    players: d.players || {},
+    notes: d.notes || {},
+    personal: d.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null },
+  };
+}
+
+function saveData(opts) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      watchlist: state.watchlist,
-      lastUpdate: state.lastUpdate,
-      players: state.players,
-      notes: state.notes,
-      personal: state.personal,
-    }));
+    if (window.PtcgStore) {
+      // 不再整份覆盖：把本窗口的改动合并进存储（另一窗口新增的记录不会被吃掉）
+      const merged = PtcgStore.applyState(state, lastWrittenState, opts);
+      state = stateFromStore(merged);
+      // 基线必须是独立副本：否则界面里的原地修改会把基线一起改掉，
+      // 删除就判断不出来（删除靠「基线里有、现在没有」来写墓碑）
+      lastWrittenState = JSON.parse(JSON.stringify(merged));
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        watchlist: state.watchlist,
+        lastUpdate: state.lastUpdate,
+        players: state.players,
+        notes: state.notes,
+        personal: state.personal,
+      }));
+    }
   } catch (e) {
     console.error('保存数据失败:', e);
     showToast('数据保存失败，可能存储空间不足', 'error');
@@ -899,7 +923,8 @@ function applyImportedData(data) {
   state.personal = data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null };
   if (!state.personal.deckList) state.personal.deckList = [];
   if (state.personal.draftMatch === undefined) state.personal.draftMatch = null;
-  saveData();
+  // 导入是「合并」而不是「清空重来」：本地已有的对局记录不会被导入文件里的旧版本顶掉
+  saveData({ tombstoneMissing: false });
   render();
   renderPersonalSection();
   showToast('数据导入成功', 'success');
@@ -945,8 +970,19 @@ function confirmPasteImport() {
 function clearAllData() {
   if (!confirm('确定清空所有数据吗？此操作不可恢复！')) return;
   if (!confirm('再次确认：将删除所有关注玩家、战绩和备注。')) return;
+  // 删除全部内容也要留墓碑，否则另一个还开着的窗口一保存就把数据带回来了
+  const now = Date.now();
+  const p = state.personal || {};
+  const deckTombstones = {}, historyTombstones = {}, deckListTombstones = {};
+  Object.keys(p.decks || {}).forEach(id => { deckTombstones[id] = now; });
+  (p.matchHistory || []).forEach(m => { historyTombstones[m.id] = now; });
+  (p.deckList || []).forEach(d => { deckListTombstones[d.id] = now; });
   state = { watchlist: [], lastUpdate: null, players: {}, notes: {},
-    personal: { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null } };
+    personal: {
+      playerName: '', currentDeckId: null, decks: {}, matchHistory: [], deckList: [], draftMatch: null,
+      deckListTombstones, historyTombstones, deckTombstones,
+      historyClearedAt: now,
+    } };
   saveData();
   render();
   renderPersonalSection();
@@ -1022,9 +1058,14 @@ function renderPersonalSection() {
   refreshApiOverview();
 }
 
+// 同一时刻只允许一次刷新在跑：否则并发的两次刷新会各自用旧基准算差额，同一次差额被记两遍
+let apiRefreshInFlight = false;
+
 async function refreshApiOverview() {
+  if (apiRefreshInFlight) return;
   const p = state.personal || {};
   if (!p.playerName) return;
+  apiRefreshInFlight = true;
   $('personalApiOverview').style.display = 'flex';
   const defaults = () => {
     $('apiRank').textContent = '--'; $('apiExp').textContent = '--';
@@ -1052,63 +1093,24 @@ async function refreshApiOverview() {
       $('apiTotalGames').textContent = t;
       $('apiWinRate').textContent = t > 0 ? ((data.win_total_count / t) * 100).toFixed(1) + '%' : '--';
 
-      // --- 差分追踪：计算本次 API 与上次的差额，分配给当前卡组 ---
       const apiWins = data.win_total_count || 0;
       const apiLosses = data.lose_total_count || 0;
 
-      if (p.lastApiWins !== undefined) {
-        const deltaWins = apiWins - p.lastApiWins;
-        const deltaLosses = apiLosses - p.lastApiLosses;
-
-        // 只在差额非负且有变化时记录
-        if (deltaWins >= 0 && deltaLosses >= 0 && (deltaWins > 0 || deltaLosses > 0)) {
-          const curDeck = p.decks && p.decks[p.currentDeckId];
-          if (curDeck) {
-            curDeck.accumulatedWins = (curDeck.accumulatedWins || 0) + deltaWins;
-            curDeck.accumulatedLosses = (curDeck.accumulatedLosses || 0) + deltaLosses;
-            curDeck.snapshotWins = apiWins;
-            curDeck.snapshotLosses = apiLosses;
-
-            if (!p.matchHistory) p.matchHistory = [];
-            const newEntry = {
-              id: uuid(),
-              deckId: p.currentDeckId,
-              deckName: curDeck.name,
-              deltaWins,
-              deltaLosses,
-              cumulativeWins: curDeck.accumulatedWins,
-              cumulativeLosses: curDeck.accumulatedLosses,
-              time: new Date().toISOString(),
-            };
-            // 自动填充预输入信息
-            if (p.draftMatch) {
-              if (p.draftMatch.firstMove) newEntry.firstMove = p.draftMatch.firstMove;
-              if (p.draftMatch.opponentDeck) newEntry.opponentDeck = p.draftMatch.opponentDeck;
-              p.draftMatch = { firstMove: null, opponentDeck: '' };  // 消耗后重置
-            }
-            p.matchHistory.push(newEntry);
-          }
-        } else if (deltaWins < 0 || deltaLosses < 0) {
-          // 数据回退（如跨赛季），只更新快照不累加
-          console.warn('API 数据回退，跳过差额记录');
-        }
-      }
-
-      // 更新最后 API 值
-      p.lastApiWins = apiWins;
-      p.lastApiLosses = apiLosses;
-      saveData();
+      // 差额记账（读最新存储 → 算差额 → 写回，见 recordApiDelta）
+      const outcome = recordApiDelta(apiWins, apiLosses);
       renderDeckStats();
       renderDeckSelector();
       renderHistory();
       renderMatchupAnalysis();
-      showToast('战绩已获取，已自动分配差额', 'success');
+      if (outcome.recorded) showToast('战绩已获取，已自动分配差额', 'success');
+      else if (outcome.rolledBack) showToast('数据回退（可能跨赛季），已只更新基准值', 'info');
+      else showToast('战绩已更新（无新增对局）', 'success');
     } else if (data && data.error) {
       const detail = (data.reasons && data.reasons.length) ? '（' + data.reasons.join('；') + '）' : '';
       setApiHint('⚠️ 获取战绩失败：' + data.error + detail + ' — 可在「⋮ → 数据中转」检测可用的中转。', 'error');
       showToast('获取战绩失败：' + data.error, 'error');
     } else if (data && data.notFound) {
-      setApiHint('⚠️ 未查询到玩家「' + p.playerName + '」的排位数据：昵称需与游戏内完全一致，且该账号至少打过一场排位。', 'warn');
+      setApiHint('⚠️ 未查询到玩家「' + ((state.personal || {}).playerName || '') + '」的排位数据：昵称需与游戏内完全一致，且该账号至少打过一场排位。', 'warn');
       showToast('未查询到该玩家的排位数据', 'error');
     } else {
       setApiHint('⚠️ 数据获取异常，请稍后重试。', 'warn');
@@ -1117,7 +1119,61 @@ async function refreshApiOverview() {
     console.warn('获取个人 API 数据失败:', e);
     setApiHint('⚠️ 获取战绩失败：' + e.message, 'error');
     showToast('获取数据失败: ' + e.message, 'error');
+  } finally {
+    apiRefreshInFlight = false;
   }
+}
+
+// 差额记账：基于「最新存储里的 lastApiWins」现取现算，全部同步完成
+// 以前是先取 state.personal 引用再 await 网络，期间任何一次 loadData() 都会让改动落到没人引用的旧对象上
+function recordApiDelta(apiWins, apiLosses) {
+  const outcome = { recorded: false, rolledBack: false };
+  if (!window.PtcgStore) return outcome;
+  const merged = PtcgStore.mutate((d) => {
+    const p = d.personal;
+    if (p.lastApiWins !== undefined) {
+      const deltaWins = apiWins - p.lastApiWins;
+      const deltaLosses = apiLosses - (p.lastApiLosses || 0);
+      if (deltaWins >= 0 && deltaLosses >= 0 && (deltaWins > 0 || deltaLosses > 0)) {
+        const curDeck = p.decks && p.decks[p.currentDeckId];
+        if (curDeck) {
+          curDeck.accumulatedWins = (curDeck.accumulatedWins || 0) + deltaWins;
+          curDeck.accumulatedLosses = (curDeck.accumulatedLosses || 0) + deltaLosses;
+          curDeck.snapshotWins = apiWins;
+          curDeck.snapshotLosses = apiLosses;
+          const newEntry = {
+            id: uuid(),
+            deckId: p.currentDeckId,
+            deckName: curDeck.name,
+            deltaWins,
+            deltaLosses,
+            cumulativeWins: curDeck.accumulatedWins,
+            cumulativeLosses: curDeck.accumulatedLosses,
+            time: new Date().toISOString(),
+          };
+          // 自动填充预输入信息
+          if (p.draftMatch) {
+            if (p.draftMatch.firstMove) newEntry.firstMove = p.draftMatch.firstMove;
+            if (p.draftMatch.opponentDeck) newEntry.opponentDeck = p.draftMatch.opponentDeck;
+            p.draftMatch = { firstMove: null, opponentDeck: '' }; // 消耗后重置
+          }
+          p.matchHistory.push(newEntry);
+          outcome.recorded = true;
+        } else {
+          console.warn('没有当前卡组，差额未记录（先在卡组管理里选一个卡组）');
+        }
+      } else if (deltaWins < 0 || deltaLosses < 0) {
+        outcome.rolledBack = true;
+        console.warn('API 数据回退，跳过差额记录');
+      }
+    }
+    p.lastApiWins = apiWins;
+    p.lastApiLosses = apiLosses;
+    return d;
+  });
+  state = stateFromStore(merged);
+  lastWrittenState = JSON.parse(JSON.stringify(merged));
+  return outcome;
 }
 
 function setPersonalPlayer() {
@@ -1247,6 +1303,14 @@ function deleteDeck(id) {
   const deck = state.personal.decks[id];
   if (!deck) return;
   if (!confirm(`确定删除卡组 "${deck.name}" 吗？\n该卡组的战绩和对应历史记录将被一并删除。`)) return;
+  const now = Date.now();
+  // 显式写墓碑：这样删除才不会被别的窗口的旧快照「复活」
+  if (!state.personal.deckTombstones) state.personal.deckTombstones = {};
+  if (!state.personal.historyTombstones) state.personal.historyTombstones = {};
+  state.personal.deckTombstones[id] = now;
+  (state.personal.matchHistory || []).forEach(m => {
+    if (m.deckId === id) state.personal.historyTombstones[m.id] = now;
+  });
   delete state.personal.decks[id];
   state.personal.matchHistory = (state.personal.matchHistory || []).filter(m => m.deckId !== id);
   if (state.personal.currentDeckId === id) {
@@ -1265,6 +1329,10 @@ function deleteDeck(id) {
 function clearHistory() {
   if (!confirm('确定清空所有对局历史吗？所有卡组战绩将归零。')) return;
   const p = state.personal;
+  const now = Date.now();
+  if (!p.historyTombstones) p.historyTombstones = {};
+  (p.matchHistory || []).forEach(m => { p.historyTombstones[m.id] = now; });
+  p.historyClearedAt = now; // 早于这个时间的记录不会再被旧快照带回来
   p.matchHistory = [];
   p.lastApiWins = undefined;
   p.lastApiLosses = undefined;
@@ -1742,8 +1810,14 @@ function renderHistory() {
     const d = new Date(h.time);
     const timeStr = `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     const opponentDeck = h.opponentDeck || '';
-    const resultClass = h.deltaWins > 0 ? 'win' : (h.deltaLosses > 0 ? 'loss' : '');
-    const resultText = h.deltaWins > 0 ? '胜' : (h.deltaLosses > 0 ? '负' : '-');
+    // 兼容早期的「手工记录」（只有 result 字段，没有 deltaWins/deltaLosses）——这类记录以前会被静默丢掉
+    const legacyWin = h.result === 'win' || h.result === '胜';
+    const legacyLoss = h.result === 'loss' || h.result === '负';
+    const resultClass = h.deltaWins > 0 ? 'win' : (h.deltaLosses > 0 ? 'loss' : (legacyWin ? 'win' : (legacyLoss ? 'loss' : '')));
+    const resultText = h.deltaWins > 0 ? '胜' : (h.deltaLosses > 0 ? '负' : (legacyWin ? '胜' : (legacyLoss ? '负' : '-')));
+    const cumHtml = (h.cumulativeWins === undefined && h.cumulativeLosses === undefined)
+      ? '<span class="history-cumulative">旧版记录</span>'
+      : `<span class="history-cumulative">累计 ${h.cumulativeWins || 0}胜 ${h.cumulativeLosses || 0}败</span>`;
 
     // 下拉选项（select 不支持图片，仅显示名称）
     const selectOptions = deckList.map(dl => {
@@ -1760,7 +1834,7 @@ function renderHistory() {
           <span class="history-deck-name">${esc(h.deckName)}</span>
           <span class="history-turn">${turnHtml}</span>
           <span class="history-result ${resultClass}">${resultText}</span>
-          <span class="history-cumulative">累计 ${h.cumulativeWins || 0}胜 ${h.cumulativeLosses || 0}败</span>
+          ${cumHtml}
           <span class="history-time">${timeStr}</span>
         </div>
         <div class="history-right">
@@ -1786,7 +1860,7 @@ function renderHistory() {
         <span class="history-deck-name">${esc(h.deckName)}</span>
         <span class="history-turn">${turnHtml}</span>
         <span class="history-result ${resultClass}">${resultText}</span>
-        <span class="history-cumulative">累计 ${h.cumulativeWins || 0}胜 ${h.cumulativeLosses || 0}败</span>
+        ${cumHtml}
         <span class="history-time">${timeStr}</span>
       </div>
       <div class="history-right">
@@ -2629,7 +2703,7 @@ applyTheme(getTheme());
 // 在 saveData 后通知 popup（本地窗口 storage 事件不会触发，用 BroadcastChannel 补上）
 const _originalSaveData = saveData;
 saveData = function () {
-  _originalSaveData();
+  _originalSaveData.apply(null, arguments); // 透传参数（导入时要用 tombstoneMissing 选项）
   notifyPopupDataUpdated();
 };
 
@@ -2668,7 +2742,7 @@ function checkAndImportMigrationData() {
       personal: data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] },
     };
     if (!state.personal.deckList) state.personal.deckList = [];
-    saveData();
+    saveData({ tombstoneMissing: false });
 
     // 清除 migrate 参数，避免刷新时重复导入
     var url = new URL(window.location.href);
@@ -2847,7 +2921,7 @@ function setupLegacyImport() {
         };
         if (!state.personal.deckList) state.personal.deckList = [];
       if (state.personal.draftMatch === undefined) state.personal.draftMatch = null;
-        saveData();
+        saveData({ tombstoneMissing: false });
         showToast('数据导入成功！', 'success');
         setTimeout(function() { location.reload(); }, 800);
       } catch (e) {

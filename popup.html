@@ -633,14 +633,43 @@ body::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 4px; }
   </div>
 </div>
 
+<script src="store.js?v=1"></script>
 <script>
 var STORAGE_KEY = 'ptcg-tracker-data';
 var channel = new BroadcastChannel('ptcg-sync');
 var CIRCUMFERENCE = 2 * Math.PI * 38;
 var data = null;
 
+// 存储层（store.js）负责「读最新 → 合并 → 写回」，避免悬浮窗把主页面刚写的记录整份覆盖掉
+function readStore() {
+  if (window.PtcgStore) return PtcgStore.read();
+  try { var r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; }
+}
+
 function loadData() {
-  try { var r = localStorage.getItem(STORAGE_KEY); data = r ? JSON.parse(r) : null; } catch (e) { data = null; }
+  data = readStore();
+}
+function freshData() {
+  return readStore();
+}
+// 读-改-写：保存前总是读取 localStorage 最新数据并做合并，避免用旧快照覆盖其他窗口的新记录
+function commitData(mutator) {
+  if (window.PtcgStore) {
+    var merged = PtcgStore.mutate(function (fresh) { mutator(fresh); return fresh; });
+    data = merged;
+    channel.postMessage({ type: 'data-updated' });
+    render();
+    return;
+  }
+  var fresh = freshData();
+  if (!fresh) fresh = { personal: { matchHistory: [], draftMatch: null } };
+  if (!fresh.personal) fresh.personal = { matchHistory: [], draftMatch: null };
+  if (!fresh.personal.matchHistory) fresh.personal.matchHistory = [];
+  mutator(fresh);
+  data = fresh;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+  channel.postMessage({ type: 'data-updated' });
+  render();
 }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -777,13 +806,11 @@ function editPopTurn(id) {
 }
 
 function savePopTurn(id, turn) {
-  if (!data || !data.personal || !data.personal.matchHistory) return;
-  data.personal.matchHistory.forEach(function(h) { delete h._editingTurn; });
-  var entry = data.personal.matchHistory.find(function(h){ return h.id===id; });
-  if (entry) entry.firstMove = turn;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  channel.postMessage({ type: 'data-updated' });
-  render();
+  commitData(function(fresh) {
+    (fresh.personal.matchHistory || []).forEach(function(h) { delete h._editingTurn; });
+    var entry = fresh.personal.matchHistory.find(function(h){ return h.id===id; });
+    if (entry) entry.firstMove = turn;
+  });
 }
 
 function editPopOpp(id) {
@@ -806,16 +833,14 @@ function savePopOpp(id, val) {
     if (!sel) { cancelPopOpp(); return; }
     val = sel.value;
   }
-  if (!data || !data.personal || !data.personal.matchHistory) return;
-  data.personal.matchHistory.forEach(function(h) { delete h._editingOpp; });
-  var entry = data.personal.matchHistory.find(function(h){ return h.id===id; });
-  if (entry) {
-    if (val) { entry.opponentDeck = val; }
-    else { delete entry.opponentDeck; }
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  channel.postMessage({ type: 'data-updated' });
-  render();
+  commitData(function(fresh) {
+    (fresh.personal.matchHistory || []).forEach(function(h) { delete h._editingOpp; });
+    var entry = fresh.personal.matchHistory.find(function(h){ return h.id===id; });
+    if (entry) {
+      if (val) { entry.opponentDeck = val; }
+      else { delete entry.opponentDeck; }
+    }
+  });
 }
 
 // ============================================================
@@ -825,36 +850,33 @@ function savePopOpp(id, val) {
 function popEnsureDraft() {
   if (!data || !data.personal) return;
   if (!data.personal.draftMatch) {
-    data.personal.draftMatch = { firstMove: null, opponentDeck: '' };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    channel.postMessage({ type: 'data-updated' });
+    commitData(function(fresh) {
+      if (!fresh.personal.draftMatch) fresh.personal.draftMatch = { firstMove: null, opponentDeck: '' };
+    });
   }
 }
 
 function popSaveDraftTurn(turn) {
-  popEnsureDraft();
-  data.personal.draftMatch.firstMove = turn;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  channel.postMessage({ type: 'data-updated' });
-  render();
+  commitData(function(fresh) {
+    if (!fresh.personal.draftMatch) fresh.personal.draftMatch = { firstMove: null, opponentDeck: '' };
+    fresh.personal.draftMatch.firstMove = turn;
+  });
 }
 
 function popSaveDraftOpp() {
   var sel = document.querySelector('.draft-opp-select');
   if (!sel) return;
-  popEnsureDraft();
-  data.personal.draftMatch.opponentDeck = sel.value;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  channel.postMessage({ type: 'data-updated' });
-  render();
+  var val = sel.value;
+  commitData(function(fresh) {
+    if (!fresh.personal.draftMatch) fresh.personal.draftMatch = { firstMove: null, opponentDeck: '' };
+    fresh.personal.draftMatch.opponentDeck = val;
+  });
 }
 
 function popClearDraft() {
-  if (!data || !data.personal) return;
-  data.personal.draftMatch = { firstMove: null, opponentDeck: '' };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  channel.postMessage({ type: 'data-updated' });
-  render();
+  commitData(function(fresh) {
+    fresh.personal.draftMatch = { firstMove: null, opponentDeck: '' };
+  });
 }
 
 function renderPopDraftCard(draft, deckList) {
@@ -892,21 +914,21 @@ function renderStatus() {
 }
 
 byId('deckSel').addEventListener('change', function() {
-  if (!data || !data.personal) return;
   var nid = this.value;
-  if (!nid || nid === data.personal.currentDeckId) return;
-  var p = data.personal;
-  var old = p.decks[p.currentDeckId];
-  if (old && p.lastApiWins !== undefined) {
-    var dw = p.lastApiWins - (old.snapshotWins||0), dl = p.lastApiLosses - (old.snapshotLosses||0);
-    if (dw>0||dl>0) { old.accumulatedWins=(old.accumulatedWins||0)+Math.max(0,dw); old.accumulatedLosses=(old.accumulatedLosses||0)+Math.max(0,dl); }
-  }
-  p.currentDeckId = nid;
-  var nd = p.decks[nid];
-  if (nd) { nd.snapshotWins = p.lastApiWins||0; nd.snapshotLosses = p.lastApiLosses||0; }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  if (!nid) return;
+  commitData(function(fresh) {
+    var p = fresh.personal || {};
+    if (nid === p.currentDeckId) return;
+    var old = p.decks[p.currentDeckId];
+    if (old && p.lastApiWins !== undefined) {
+      var dw = p.lastApiWins - (old.snapshotWins||0), dl = p.lastApiLosses - (old.snapshotLosses||0);
+      if (dw>0||dl>0) { old.accumulatedWins=(old.accumulatedWins||0)+Math.max(0,dw); old.accumulatedLosses=(old.accumulatedLosses||0)+Math.max(0,dl); }
+    }
+    p.currentDeckId = nid;
+    var nd = p.decks[nid];
+    if (nd) { nd.snapshotWins = p.lastApiWins||0; nd.snapshotLosses = p.lastApiLosses||0; }
+  });
   channel.postMessage({ type: 'deck-changed', deckId: nid });
-  render();
 });
 
 window.addEventListener('storage', function(e) { if (e.key===STORAGE_KEY) { loadData(); render(); } });
