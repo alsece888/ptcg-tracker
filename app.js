@@ -6,22 +6,39 @@
 const PTCG_BASE = 'https://ptcg.mivm.cn';
 // ============================================================
 // CORS 中转（浏览器直连上游 API 会被 CORS 拦截，只能走中转）
-// 2026-09 起原先三个中转全部失效：
-//   proxy.cors.sh  → 域名已注销（DNS 解析失败）
-//   corsproxy.io   → 改为必须 API Key（401）
-//   allorigins     → Cloudflare 520（服务不可用）
-// 现在的顺序：先试上次成功的，再依次回退。
-// 可在「⋮ → 数据中转」里填入自建中转地址（见 RELAY.md）。
+// 「连得通」和「状态码透传正确」是两回事，2026-09-29 实测结果：
+//   cors.isteed.cc           可用，且原样透传 404（首选）
+//   cors-get-proxy.sirjosh…  可用，但 404 被抹成 200 + 空响应
+//   r.jina.ai                可用，返回带前缀的纯文本，需要剥壳
+//   cors.eu.org              429 限流（无 CORS 头，浏览器只会报 Failed to fetch）
+//   api.codetabs.com         503 / 超时
+//   api.allorigins.win       522
+// 策略：每批并发竞速，谁先给出可用数据就用谁，其余请求立刻中断；整批都失败才换下一批。
+// 可在「⋮ → 数据中转」里检测可用性，或填入自建中转地址（见 RELAY.md）。
 // ============================================================
-const RELAY_STORAGE_KEY = 'ptcg-relay-url';
+const RELAY_STORAGE_KEY = 'ptcg-relay-url'; // 用户自建的中转地址
+const RELAY_OK_KEY = 'ptcg-relay-ok';       // 上次成功的中转 id（下次优先用它）
+
+// r.jina.ai 会把内容包成 "Title: … / URL Source: … / Markdown Content: <原文>" 的纯文本
+function unwrapJina(text) {
+  const start = text.search(/[[{]/);
+  if (start < 0) return '';
+  const end = Math.max(text.lastIndexOf(']'), text.lastIndexOf('}'));
+  return end > start ? text.slice(start, end + 1) : '';
+}
+
 const CORS_PROXIES = [
   { id: 'isteed', name: 'cors.isteed.cc', build: (url) => `https://cors.isteed.cc/${url}` },
   { id: 'sirjosh', name: 'workers.dev 中转', build: (url) => `https://cors-get-proxy.sirjosh.workers.dev/?url=${encodeURIComponent(url)}` },
+  { id: 'jina', name: 'r.jina.ai', build: (url) => `https://r.jina.ai/${url}`, unwrap: unwrapJina },
   { id: 'cors-eu', name: 'cors.eu.org', build: (url) => `https://cors.eu.org/${url}` },
   { id: 'codetabs', name: 'api.codetabs.com', build: (url) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}` },
   { id: 'allorigins', name: 'api.allorigins.win', build: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
 ];
-const RELAY_TIMEOUT_MS = 12000; // 单个中转的超时时间
+const RELAY_TIMEOUT_MS = 9000; // 单个中转的超时时间
+// 每批并发几个中转：2 是「抗单点故障」和「别把公共中转请求量翻几倍」之间的折中
+// （批量刷新战绩时本来就是 5 个玩家并发，每批开得越多越容易被限流）
+const RELAY_WAVE_SIZE = 2;
 
 // 自定义中转地址：填前缀（会自动拼完整 URL），或用 {url} 占位符
 function getCustomRelay() {
@@ -424,7 +441,7 @@ let editingDeckListId = null;
 let deckIconSearchTerm = '';
 let searchTerm = '';
 let autoRefreshTimer = null;
-let workingProxyIdx = 0; // 当前可用的代理索引
+let lastWorkingRelayId = ''; // 上次成功的中转 id
 
 // --- DOM 元素 ---
 const $ = (id) => document.getElementById(id);
@@ -526,54 +543,118 @@ function saveData() {
 
 let lastWorkingRelay = ''; // 最近一次成功的中转名（用于诊断提示）
 
+function preferredRelayId() {
+  try { return localStorage.getItem(RELAY_OK_KEY) || ''; } catch (e) { return ''; }
+}
+
+// 自建中转永远排第一，其次是上次成功过的中转，其余保持声明顺序
+function orderProxies(proxies) {
+  const rest = proxies.slice();
+  const front = [];
+  const take = (id) => {
+    if (!id) return;
+    const i = rest.findIndex((p) => p.id === id);
+    if (i >= 0) front.push(rest.splice(i, 1)[0]);
+  };
+  take('custom');
+  take(lastWorkingRelayId || preferredRelayId());
+  return front.concat(rest);
+}
+
+function rememberRelay(proxy) {
+  lastWorkingRelay = proxy.name;
+  lastWorkingRelayId = proxy.id;
+  try { localStorage.setItem(RELAY_OK_KEY, proxy.id); } catch (e) { /* localStorage 不可用时忽略 */ }
+  const badge = $('relayStatus');
+  if (badge) badge.textContent = proxy.name;
+}
+
+// 单个中转的一次尝试
+// 返回 { kind:'data', data } | { kind:'notFound', definitive } | { kind:'fail', reason }
+async function tryOneRelay(proxy, targetUrl, opts, controller) {
+  const timer = setTimeout(() => controller.abort(), opts.timeout || RELAY_TIMEOUT_MS);
+  try {
+    const init = { signal: controller.signal, headers: { 'Accept': 'application/json' } };
+    if (opts.method === 'POST') {
+      init.method = 'POST';
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(opts.body || {});
+    }
+    const resp = await fetch(proxy.build(targetUrl), init);
+    const text = (await resp.text()) || '';
+
+    // 上游 404 = 玩家不存在，必须和中转故障区分开。
+    // 有的中转原样透传 404，有的把它抹平仅在文本里提示，所以两种都要认。
+    if (resp.status === 404 || /Target URL returned error 404/.test(text)) {
+      if (opts.accept404) return { kind: 'notFound', definitive: resp.status === 404 };
+      return { kind: 'fail', reason: `${proxy.name}: HTTP 404` };
+    }
+    if (!resp.ok) return { kind: 'fail', reason: `${proxy.name}: HTTP ${resp.status}` };
+
+    const body = proxy.unwrap ? proxy.unwrap(text) : text;
+    if (!body.trim()) {
+      // 部分中转（如 sirjosh）会把 404 抹成 200 + 空响应，这种「空」不能当成功
+      if (opts.accept404) return { kind: 'notFound', definitive: false };
+      return { kind: 'fail', reason: `${proxy.name}: 返回空内容` };
+    }
+    try {
+      return { kind: 'data', data: JSON.parse(body) };
+    } catch (e) {
+      return { kind: 'fail', reason: `${proxy.name}: 返回的不是 JSON` };
+    }
+  } catch (e) {
+    const why = (e && e.name === 'AbortError') ? '超时' : ((e && e.message) || '网络错误');
+    return { kind: 'fail', reason: `${proxy.name}: ${why}` };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// 一批中转并发竞速：拿到可用数据或确定的 404 就立刻返回，并中断同批其他请求
+function raceRelays(wave, targetUrl, opts) {
+  return new Promise((resolve) => {
+    const controllers = wave.map(() => new AbortController());
+    const reasons = [];
+    let pending = wave.length;
+    let looseNotFound = null; // 被中转抹平的 404：只有没有更确定的答案时才采用
+    let settled = false;
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      controllers.forEach((c) => { try { c.abort(); } catch (e) { /* 忽略 */ } });
+      resolve(result);
+    };
+
+    wave.forEach((proxy, i) => {
+      tryOneRelay(proxy, targetUrl, opts, controllers[i]).then((res) => {
+        pending--;
+        if (settled) return;
+        if (res.kind === 'data') return finish({ proxy, data: res.data });
+        if (res.kind === 'notFound') {
+          if (res.definitive) return finish({ proxy, notFound: true });
+          if (!looseNotFound) looseNotFound = { proxy, notFound: true };
+        } else {
+          reasons.push(res.reason);
+        }
+        if (pending === 0) finish(looseNotFound || { failures: reasons });
+      });
+    });
+  });
+}
+
 async function fetchViaProxy(targetUrl, opts) {
   opts = opts || {};
-  const proxies = activeProxies();
+  const ordered = orderProxies(activeProxies());
   const reasons = [];
 
-  // 尝试从上次成功的中转开始，逐个回退
-  for (let attempt = 0; attempt < proxies.length; attempt++) {
-    const idx = (workingProxyIdx + attempt) % proxies.length;
-    const proxy = proxies[idx];
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), opts.timeout || RELAY_TIMEOUT_MS);
-    try {
-      const init = { signal: controller.signal, headers: { 'Accept': 'application/json' } };
-      if (opts.method === 'POST') {
-        init.method = 'POST';
-        init.headers['Content-Type'] = 'application/json';
-        init.body = JSON.stringify(opts.body || {});
-      }
-      const resp = await fetch(proxy.build(targetUrl), init);
-
-      // 上游 404 = 玩家不存在，必须透传，不能当成中转故障
-      if (resp.status === 404 && opts.accept404) {
-        workingProxyIdx = idx;
-        lastWorkingRelay = proxy.name;
-        return { notFound: true };
-      }
-      if (!resp.ok) { reasons.push(`${proxy.name}: HTTP ${resp.status}`); continue; }
-
-      const text = await resp.text();
-      if (!text.trim()) { reasons.push(`${proxy.name}: 返回空内容`); continue; }
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        reasons.push(`${proxy.name}: 返回的不是 JSON`);
-        continue;
-      }
-      workingProxyIdx = idx; // 记住可用的中转
-      lastWorkingRelay = proxy.name;
-      const badge = $('relayStatus');
-      if (badge) badge.textContent = proxy.name;
-      return data;
-    } catch (e) {
-      const why = (e && e.name === 'AbortError') ? '超时' : ((e && e.message) || '网络错误');
-      reasons.push(`${proxy.name}: ${why}`);
-    } finally {
-      clearTimeout(timer);
+  for (let i = 0; i < ordered.length; i += RELAY_WAVE_SIZE) {
+    const out = await raceRelays(ordered.slice(i, i + RELAY_WAVE_SIZE), targetUrl, opts);
+    if (out.proxy) {
+      rememberRelay(out.proxy);
+      return out.notFound ? { notFound: true } : out.data;
     }
+    if (out.failures) reasons.push.apply(reasons, out.failures);
   }
 
   const err = new Error('数据中转全部不可用');
@@ -2332,10 +2413,11 @@ function saveCustomRelay() {
   try {
     if (v) localStorage.setItem(RELAY_STORAGE_KEY, v);
     else localStorage.removeItem(RELAY_STORAGE_KEY);
+    localStorage.removeItem(RELAY_OK_KEY); // 换过中转，之前记住的成功记录作废
   } catch (e) {
     /* localStorage 不可用时忽略 */
   }
-  workingProxyIdx = 0;
+  lastWorkingRelayId = '';
   renderRelayList(activeProxies(), null);
   $('relayMsg').textContent = v ? '已保存，将优先使用这个中转' : '已清空，使用默认中转列表';
   $('relayMsg').className = 'paste-msg success';
@@ -2346,35 +2428,25 @@ async function testRelays() {
   const results = {};
   const url = `${PTCG_BASE}/api/rank/player/tops`;
   $('relayTestBtn').disabled = true;
-  $('relayMsg').textContent = '检测中…（每个中转最多等待 12 秒）';
+  $('relayMsg').textContent = `检测中…（每个中转最多等待 ${Math.round(RELAY_TIMEOUT_MS / 1000)} 秒）`;
   $('relayMsg').className = 'paste-msg';
 
   for (const p of items) {
     renderRelayList(items, results);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
     const t0 = Date.now();
-    try {
-      const resp = await fetch(p.build(url), { signal: controller.signal, headers: { Accept: 'application/json' } });
-      const text = await resp.text();
-      if (!resp.ok) results[p.id] = { ok: false, err: 'HTTP ' + resp.status };
-      else if (!text.trim()) results[p.id] = { ok: false, err: '空响应' };
-      else { JSON.parse(text); results[p.id] = { ok: true, ms: Date.now() - t0 }; }
-    } catch (e) {
-      const why = (e && e.name === 'AbortError') ? '超时' : ((e && e.message) || '网络错误');
-      results[p.id] = { ok: false, err: why };
-    } finally {
-      clearTimeout(timer);
-    }
+    const r = await tryOneRelay(p, url, {}, new AbortController());
+    results[p.id] = r.kind === 'data'
+      ? { ok: true, ms: Date.now() - t0 }
+      : { ok: false, err: String(r.reason || '失败').replace(p.name + ': ', '') };
   }
   renderRelayList(items, results);
 
   const okList = items.filter((p) => results[p.id] && results[p.id].ok);
   if (okList.length) {
-    $('relayMsg').textContent = `可用中转 ${okList.length} 个：${okList.map((p) => p.name).join('、')}`;
+    $('relayMsg').textContent = `可用中转 ${okList.length} 个：${okList.map((p) => p.name).join('、')}（获取战绩时它们会同时发起，谁快用谁）`;
     $('relayMsg').className = 'paste-msg success';
   } else {
-    $('relayMsg').textContent = '公共中转全部不可用。建议按 RELAY.md 自建一个中转后填在上方。';
+    $('relayMsg').textContent = '公共中转全部不可用。建议按 RELAY.md 自建一个中转后填在上方；若这里能连上而获取战绩仍失败，多半是浏览器插件或代理挡住了这些域名。';
     $('relayMsg').className = 'paste-msg error';
   }
   $('relayTestBtn').disabled = false;
@@ -2390,6 +2462,15 @@ $('relaySaveBtn').addEventListener('click', saveCustomRelay);
 $('relayModal').addEventListener('click', (e) => {
   if (e.target === $('relayModal')) closeRelayModal();
 });
+
+// 启动时把「上次成功的中转」显示在菜单徽标上，一眼就能看出当前在用哪个
+(function showLastRelayOnStart() {
+  const badge = $('relayStatus');
+  const id = preferredRelayId();
+  if (!badge || !id) return;
+  const target = activeProxies().find((p) => p.id === id);
+  if (target) badge.textContent = target.name;
+})();
 
 // 头部直接可见的导出/导入按钮
 $('exportBtn2').addEventListener('click', exportData);

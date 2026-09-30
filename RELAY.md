@@ -6,23 +6,26 @@
 该接口**没有返回 CORS 响应头**，所以网页里的 JS 无法直接读取它的内容（跨域限制），
 必须经过一个「中转」（CORS proxy）代取，网页再去读中转的返回。
 
-## 当前默认中转与失效记录
+## 当前中转与实测记录
 
 2026-09 之前用的三个公共中转**全部失效**了，这就是「突然获取不到战绩」的原因：
+`proxy.cors.sh` 域名注销、`corsproxy.io` 改为必须 API Key、`api.allorigins.win` Cloudflare 520。
 
-| 中转 | 状态 |
-| --- | --- |
-| `proxy.cors.sh` | 域名已注销，DNS 解析失败 |
-| `corsproxy.io` | 改为必须申请 API Key，未带 Key 返回 401 |
-| `api.allorigins.win` | Cloudflare 520，服务不可用 |
+2026-09-29 又整体实测了一遍：
 
-现在的默认顺序（在「⋮ → 数据中转」里可以一键检测）：
+| 中转 | 状态 | 备注 |
+| --- | --- | --- |
+| `cors.isteed.cc` | ✅ 可用 | 1 秒左右返回，且原样透传 404（首选） |
+| `cors-get-proxy.sirjosh.workers.dev` | ✅ 可用 | 404 被抹成 200 + 空响应，工具侧已兼容 |
+| `r.jina.ai` | ✅ 可用 | 返回带 `Title / URL Source / Markdown Content` 前缀的纯文本，脚本会剥壳后再解析 |
+| `cors.eu.org` | ✕ 429 | 限流；响应不带 CORS 头，浏览器里只会显示 `Failed to fetch` |
+| `api.codetabs.com` | ✕ 503 | 服务异常 |
+| `api.allorigins.win` | ✕ 522 | Cloudflare 源站不可达 |
 
-1. `cors.isteed.cc` — 国内社区维护，实测可用，且能正确透传 404
-2. `cors-get-proxy.sirjosh.workers.dev` — 公共 Workers 中转
-3. `cors.eu.org`
-4. `api.codetabs.com/v1/proxy`
-5. `api.allorigins.win`
+**取数策略：并发竞速。** 每批最多 2 个中转同时发请求，谁先给出可用数据就用谁，
+其余请求立刻中断；整批都失败才换下一批。所以单个中转挂掉或变慢不会再拖垮体验，
+也不会像以前那样「一个超时等 12 秒、五个轮流等一分钟」。上次成功的中转会记在
+`localStorage['ptcg-relay-ok']` 里，下次优先试它；自建中转永远排第一。
 
 公共中转是「别人免费提供的服务」，随时可能限流或停服。长期使用建议自己部署一个中转：
 免费、稳定、只有你自己用（见下）。
@@ -78,6 +81,11 @@ export default {
   可以先用浏览器 F12 控制台打开
   `https://ptcg.mivm.cn/api/rank/player/query?screen_name=你的昵称` 确认上游本身正常
   （多数情况下它是正常的，问题只在中转）。
+- **检测说「有中转可用」，但获取战绩还是失败？** 先重新点一次「获取战绩」试一下
+  （上游偶发抖动）。如果稳定复现，多半是**浏览器的网络出口和命令行不一致**：
+  浏览器走了代理/VPN，或装了广告拦截类扩展挡掉 `*.workers.dev`、`cors.isteed.cc`
+  这类域名。可以用无痕窗口（默认禁用扩展）或换个浏览器再试；命令行能连上、
+  浏览器连不上，基本就是这个原因。
 - **中转会不会泄露数据？** 请求里只有游戏昵称这种公开信息，不含账号密码。介意的话就自建。
 
 ## 组卡页的卡图（已不依赖任何接口）

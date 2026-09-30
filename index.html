@@ -380,6 +380,7 @@
       </div>
       <p class="paste-modal-hint">
         浏览器无法直接访问小天冠山 API（跨域限制），必须经过「中转」取数据。
+        获取战绩时会同时并发尝试几个中转，谁先返回可用数据就用谁。
         公共中转可能随时失效，可在此检测可用性，或填入你自己部署的中转地址（见
         <a href="RELAY.md" target="_blank" rel="noopener">RELAY.md</a>，五分钟可搞定）。
       </p>
@@ -393,6 +394,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=16"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>
