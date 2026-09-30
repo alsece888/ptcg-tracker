@@ -2755,6 +2755,176 @@ body {
 }
 
 /* ============================================================
+   移动端体验优化
+   ============================================================ */
+@media (max-width: 768px) {
+  .app {
+    padding: 14px 12px 44px;
+  }
+
+  .header {
+    gap: 14px;
+    margin-bottom: 18px;
+    padding-bottom: 16px;
+  }
+
+  .logo { font-size: 23px; }
+  .subtitle { font-size: 12px; color: var(--text-muted); }
+
+  .header-right {
+    gap: 10px;
+  }
+
+  .header-right .btn {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+    padding: 0 10px;
+  }
+
+  .header-right .btn-icon { font-size: 18px; }
+  .update-info { font-size: 12px; }
+
+  .module-title {
+    font-size: 18px;
+    margin-bottom: 14px;
+  }
+
+  .personal-card,
+  .add-card,
+  .deck-builder-card {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .section-title { font-size: 16px; }
+  .section-desc { font-size: 13px; line-height: 1.65; }
+
+  .btn { min-height: 42px; }
+  .btn-sm { min-height: 36px; }
+
+  /* iOS 聚焦不缩放：表单字号提到 16px */
+  .setup-input,
+  .search-input,
+  .sort-select,
+  .deck-code-input,
+  .deck-name-input,
+  .deck-list-name-input,
+  .note-input,
+  .paste-input,
+  .add-input {
+    font-size: 16px;
+  }
+
+  /* 关注列表移动卡片 */
+  .mobile-player-list {
+    padding: 14px 12px;
+    gap: 12px;
+  }
+
+  .mobile-player-card {
+    padding: 14px 16px;
+    gap: 10px;
+    border-radius: 14px;
+  }
+
+  .mpc-name .player-name { font-size: 15px; }
+  .mpc-meta {
+    gap: 8px 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+  .mpc-meta .meta-item { font-size: 13px; }
+  .mpc-delete .btn-delete { width: 38px; height: 38px; font-size: 16px; }
+  .mpc-note, .mpc-streak { font-size: 13px; }
+  .note-input { width: 100%; box-sizing: border-box; }
+
+  /* 统计卡片 */
+  .stats-section { gap: 10px; }
+  .stat-card { padding: 14px 10px; border-radius: 14px; }
+  .stat-value { font-size: 22px; }
+
+  /* 表格控件 */
+  .table-header { padding: 16px 14px; gap: 12px; }
+  /* 字号提到 16px 后，窄屏（≤360px）搜索框 + 排序下拉会顶出屏幕，允许下拉自身收窄 */
+  .table-controls { gap: 8px; }
+  .search-input,
+  .sort-select { min-height: 40px; }
+  .search-input { flex: 1; width: auto; }
+  .sort-select { min-width: 0; }
+
+  /* 个人战绩：API 总览改 3 列网格 */
+  .personal-api-overview {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+  .api-stat { min-width: 0; }
+  .api-stat-value { font-size: 17px; }
+  .personal-api-overview .btn { grid-column: 1 / -1; }
+  .setup-input-group { gap: 8px; }
+  .setup-input { min-height: 42px; }
+
+  /* 对局历史 */
+  .history-actions { gap: 8px; }
+  .history-actions .btn {
+    min-height: 38px;
+    font-size: 12px;
+    padding: 0 10px;
+  }
+  .history-list { gap: 10px; }
+  .history-item { padding: 12px 14px; }
+
+  /* 卡组管理 */
+  .deck-manage-add { flex-wrap: wrap; gap: 8px; }
+  .deck-name-input { flex: 1 1 100%; min-height: 42px; }
+  .deck-manage-add .btn { flex: 1; }
+
+  /* 对手卡组图鉴 */
+  .deck-list-manage-panel { padding: 14px; }
+  .deck-list-add-row { gap: 8px; }
+  .deck-list-name-input { min-height: 42px; }
+  .pokemon-icon-picker { width: 100%; }
+  .pokemon-icon-grid {
+    grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  }
+
+  /* 组卡页 */
+  .deck-builder-actions .btn { min-height: 44px; font-size: 13px; }
+  .deck-code-input { min-height: 130px; padding: 12px; }
+  .deck-card-grid { gap: 10px; }
+  .deck-card-info { padding: 8px 8px 10px; }
+  .deck-card-name { font-size: 13px; }
+  .deck-builder-stat { padding: 12px 8px; }
+  .deck-builder-stat .stat-num { font-size: 20px; }
+  .deck-builder-breakdown-header { padding: 12px 14px; }
+  .deck-breakdown-row { padding: 11px 14px; gap: 10px; }
+
+  /* 弹窗 / Toast / 底部 */
+  .paste-modal-content { padding: 18px 16px; }
+  .toast { max-width: calc(100vw - 40px); font-size: 13px; }
+  .footer { padding: 20px 0 8px; }
+  .footer-text { font-size: 12px; line-height: 1.7; text-align: center; }
+}
+
+@media (max-width: 480px) {
+  .header-right .btn {
+    min-width: 42px;
+    min-height: 42px;
+  }
+
+  .mpc-meta {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+  }
+
+  .deck-builder-actions { gap: 8px; }
+  .deck-builder-actions .btn { font-size: 12px; }
+  .deck-card-grid { gap: 8px; }
+}
+
+/* ============================================================
    组卡页：类型筛选 / 排序工具栏（移动端）
    ============================================================ */
 @media (max-width: 768px) {
