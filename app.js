@@ -983,6 +983,7 @@ function clearAllData() {
       deckListTombstones, historyTombstones, deckTombstones,
       historyClearedAt: now,
     } };
+  stopPersonalAutoRefresh(); // 没有昵称了，自动同步停掉
   saveData();
   render();
   renderPersonalSection();
@@ -1024,7 +1025,7 @@ function renderPersonalSection() {
   // 设置昵称区域
   $('personalSetupMsg').textContent = '';
   if (!hasPlayer) {
-    $('personalApiOverview').style.display = 'none';
+    $('personalApiOverview').classList.remove('is-visible');
     $('personalDeckPanel').style.display = 'none';
     $('personalHistory').style.display = 'none';
     $('personalPlayerInput').value = '';
@@ -1061,68 +1062,129 @@ function renderPersonalSection() {
 // 同一时刻只允许一次刷新在跑：否则并发的两次刷新会各自用旧基准算差额，同一次差额被记两遍
 let apiRefreshInFlight = false;
 
-async function refreshApiOverview() {
+// 个人战绩自动同步：以前只有「页面加载 / 悬浮窗写入触发 storage 事件 / 手动点按钮」
+// 才会去问 API，页面开着挂一晚上也不会自己记。这里按固定间隔轮询，
+// 打完一局最多等一个间隔就会被记进对局历史。
+const PERSONAL_POLL_MS = 60 * 1000;        // 轮询间隔
+const PERSONAL_MIN_GAP_MS = 20 * 1000;     // 切回标签页/手动刷新时的最小间隔，避免连续打请求
+let personalPollTimer = null;
+let lastPersonalSyncAt = 0;
+
+async function refreshApiOverview(opts) {
+  opts = opts || {};
   if (apiRefreshInFlight) return;
   const p = state.personal || {};
   if (!p.playerName) return;
   apiRefreshInFlight = true;
-  $('personalApiOverview').style.display = 'flex';
+  $('personalApiOverview').classList.add('is-visible');
   const defaults = () => {
     $('apiRank').textContent = '--'; $('apiExp').textContent = '--';
     $('apiTotalWin').textContent = '--'; $('apiTotalLose').textContent = '--';
     $('apiWinRate').textContent = '--'; $('apiTotalGames').textContent = '--';
   };
-  defaults();
-  setApiHint('');
+  // 自动同步时不把已有数字清成「--」，否则界面上会一直闪
+  if (!opts.silent) { defaults(); setApiHint(''); }
   try {
     const [data, tops] = await Promise.all([
       fetchPlayer(p.playerName),
-      fetchTops().catch(() => []),
+      // 排名要拉整张排行榜，比较重；自动同步时就不拉了，沿用上次的排名
+      opts.skipTops ? Promise.resolve(null) : fetchTops().catch(() => []),
     ]);
     if (data && !data.notFound && !data.error) {
-      // 排行榜排名
-      let rank = null;
       if (Array.isArray(tops)) {
+        let rank = null;
         tops.forEach((tp, i) => { if (tp.name === data.name) rank = i + 1; });
+        $('apiRank').textContent = rank || '-';
       }
-      $('apiRank').textContent = rank || '-';
       $('apiExp').textContent = data.exp || '-';
       $('apiTotalWin').textContent = data.win_total_count || '0';
       $('apiTotalLose').textContent = data.lose_total_count || '0';
       const t = (data.win_total_count || 0) + (data.lose_total_count || 0);
       $('apiTotalGames').textContent = t;
       $('apiWinRate').textContent = t > 0 ? ((data.win_total_count / t) * 100).toFixed(1) + '%' : '--';
+      setApiHint('');
 
       const apiWins = data.win_total_count || 0;
       const apiLosses = data.lose_total_count || 0;
 
       // 差额记账（读最新存储 → 算差额 → 写回，见 recordApiDelta）
       const outcome = recordApiDelta(apiWins, apiLosses);
+      lastPersonalSyncAt = Date.now();
+      updatePersonalSyncStatus();
       renderDeckStats();
       renderDeckSelector();
       renderHistory();
       renderMatchupAnalysis();
-      if (outcome.recorded) showToast('战绩已获取，已自动分配差额', 'success');
-      else if (outcome.rolledBack) showToast('数据回退（可能跨赛季），已只更新基准值', 'info');
-      else showToast('战绩已更新（无新增对局）', 'success');
+      if (outcome.recorded) {
+        const e = outcome.entry;
+        showToast(opts.silent
+          ? `已自动记录对局：${e.deltaWins} 胜 ${e.deltaLosses} 负`
+          : '战绩已获取，已自动分配差额', 'success');
+      } else if (outcome.rolledBack) {
+        showToast('数据回退（可能跨赛季），已只更新基准值', 'info');
+      } else if (!opts.silent) {
+        showToast('战绩已更新（无新增对局）', 'success');
+      }
     } else if (data && data.error) {
       const detail = (data.reasons && data.reasons.length) ? '（' + data.reasons.join('；') + '）' : '';
       setApiHint('⚠️ 获取战绩失败：' + data.error + detail + ' — 可在「⋮ → 数据中转」检测可用的中转。', 'error');
-      showToast('获取战绩失败：' + data.error, 'error');
+      if (!opts.silent) showToast('获取战绩失败：' + data.error, 'error');
     } else if (data && data.notFound) {
       setApiHint('⚠️ 未查询到玩家「' + ((state.personal || {}).playerName || '') + '」的排位数据：昵称需与游戏内完全一致，且该账号至少打过一场排位。', 'warn');
-      showToast('未查询到该玩家的排位数据', 'error');
+      if (!opts.silent) showToast('未查询到该玩家的排位数据', 'error');
     } else {
       setApiHint('⚠️ 数据获取异常，请稍后重试。', 'warn');
     }
   } catch (e) {
     console.warn('获取个人 API 数据失败:', e);
     setApiHint('⚠️ 获取战绩失败：' + e.message, 'error');
-    showToast('获取数据失败: ' + e.message, 'error');
+    if (!opts.silent) showToast('获取数据失败: ' + e.message, 'error');
   } finally {
     apiRefreshInFlight = false;
   }
 }
+
+// 自动同步的开关与状态显示
+function updatePersonalSyncStatus() {
+  const el = $('personalAutoStatus');
+  if (!el) return;
+  const p = state.personal || {};
+  if (!p.playerName) { el.textContent = ''; return; }
+  if (!personalPollTimer) { el.textContent = '自动同步：已停止'; return; }
+  let last = '尚未同步';
+  if (lastPersonalSyncAt) {
+    const d = new Date(lastPersonalSyncAt);
+    last = `上次 ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  el.textContent = `自动同步：每 ${PERSONAL_POLL_MS / 1000} 秒 · ${last}`;
+}
+
+function startPersonalAutoRefresh() {
+  stopPersonalAutoRefresh();
+  personalPollTimer = setInterval(() => {
+    if (!(state.personal && state.personal.playerName)) return;
+    refreshApiOverview({ silent: true, skipTops: true });
+  }, PERSONAL_POLL_MS);
+  updatePersonalSyncStatus();
+}
+
+function stopPersonalAutoRefresh() {
+  if (personalPollTimer) clearInterval(personalPollTimer);
+  personalPollTimer = null;
+  updatePersonalSyncStatus();
+}
+
+// 切回标签页 / 窗口重新获得焦点时立刻补一次（距上次同步太近就跳过）
+function refreshPersonalIfStale() {
+  if (!(state.personal && state.personal.playerName)) return;
+  if (Date.now() - lastPersonalSyncAt < PERSONAL_MIN_GAP_MS) return;
+  refreshApiOverview({ silent: true, skipTops: true });
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshPersonalIfStale();
+});
+window.addEventListener('focus', refreshPersonalIfStale);
 
 // 差额记账：基于「最新存储里的 lastApiWins」现取现算，全部同步完成
 // 以前是先取 state.personal 引用再 await 网络，期间任何一次 loadData() 都会让改动落到没人引用的旧对象上
@@ -1159,6 +1221,7 @@ function recordApiDelta(apiWins, apiLosses) {
           }
           p.matchHistory.push(newEntry);
           outcome.recorded = true;
+          outcome.entry = newEntry;
         } else {
           console.warn('没有当前卡组，差额未记录（先在卡组管理里选一个卡组）');
         }
@@ -1189,6 +1252,7 @@ function setPersonalPlayer() {
   if (!state.personal.matchHistory) state.personal.matchHistory = [];
   saveData();
   renderPersonalSection();
+  startPersonalAutoRefresh(); // 刚设好昵称，自动同步跟上去
   showToast('已设置个人玩家: ' + name, 'success');
 }
 
@@ -2710,7 +2774,7 @@ saveData = function () {
 // 在 refreshApiOverview 成功后弹出 toast 前也通知 popup
 const _originalRefreshApiOverview = refreshApiOverview;
 refreshApiOverview = async function () {
-  await _originalRefreshApiOverview();
+  await _originalRefreshApiOverview.apply(null, arguments); // 透传 {silent, skipTops}
   // notifyPopupDataUpdated 已在 saveData 中调用
 };
 
@@ -2967,6 +3031,9 @@ checkAndImportMigrationData();
 loadData();
 render();
 renderPersonalSection();
+
+// 已设置昵称的话，开启个人战绩自动同步（每 60 秒问一次，打完一局最多等一个间隔就记上）
+if (state.personal && state.personal.playerName) startPersonalAutoRefresh();
 
 // 旧域名检测迁移横幅
 checkDomainMigration();

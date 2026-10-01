@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PTCG 玩家追踪器</title>
   <meta name="description" content="宝可梦卡牌小天冠山排位赛玩家数据追踪工具">
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <script>
   var _hmt = _hmt || [];
@@ -99,14 +99,15 @@
         </div>
 
         <!-- API 总体数据 -->
-        <div id="personalApiOverview" class="personal-api-overview" style="display:none;">
+        <div id="personalApiOverview" class="personal-api-overview">
           <div class="api-stat"><span class="api-stat-label">排名</span><span class="api-stat-value" id="apiRank">--</span></div>
           <div class="api-stat"><span class="api-stat-label">积分</span><span class="api-stat-value" id="apiExp">--</span></div>
           <div class="api-stat"><span class="api-stat-label">总胜场</span><span class="api-stat-value win" id="apiTotalWin">--</span></div>
           <div class="api-stat"><span class="api-stat-label">总败场</span><span class="api-stat-value lose" id="apiTotalLose">--</span></div>
           <div class="api-stat"><span class="api-stat-label">总胜率</span><span class="api-stat-value" id="apiWinRate">--</span></div>
           <div class="api-stat"><span class="api-stat-label">总场数</span><span class="api-stat-value" id="apiTotalGames">--</span></div>
-          <button id="personalRefreshApiBtn" class="btn btn-sm btn-ghost" title="刷新 API 数据">🔄 刷新</button>
+          <button id="personalRefreshApiBtn" class="btn btn-sm btn-ghost" title="立刻同步一次 API 数据">🔄 刷新</button>
+          <span id="personalAutoStatus" class="personal-auto-status"></span>
         </div>
       </div>
       <div id="apiHint" class="api-hint" style="display:none;"></div>
@@ -166,7 +167,7 @@
           <!-- 获取数据按钮 -->
           <div class="deck-record-row">
             <button id="personalFetchBtn" class="btn btn-fetch-data">🔄 获取战绩（API差分）</button>
-            <span class="deck-record-hint">切换卡组后点击获取，自动将差额分配给当前卡组</span>
+            <span class="deck-record-hint">页面打开时会每 60 秒自动同步一次，打完一局稍等就会记上；也可点按钮立刻获取</span>
           </div>
         </div>
 
@@ -395,6 +396,6 @@
   </div>
 
   <script src="store.js?v=1"></script>
-  <script src="app.js?v=18"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>

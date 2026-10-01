@@ -377,7 +377,7 @@ body {
 
 /* API 总览 */
 .personal-api-overview {
-  display: flex;
+  display: none;
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
@@ -386,6 +386,17 @@ body {
   background: var(--bg-input);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
+}
+
+/* 通过类切换显示：内联 display 会盖掉媒体查询，移动端的网格布局就失效了 */
+.personal-api-overview.is-visible {
+  display: flex;
+}
+
+.personal-auto-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
 }
 
 .api-stat {
@@ -2854,7 +2865,7 @@ body {
   .sort-select { min-width: 0; }
 
   /* 个人战绩：API 总览改 3 列网格 */
-  .personal-api-overview {
+  .personal-api-overview.is-visible {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 10px;
@@ -2862,7 +2873,8 @@ body {
   }
   .api-stat { min-width: 0; }
   .api-stat-value { font-size: 17px; }
-  .personal-api-overview .btn { grid-column: 1 / -1; }
+  .personal-api-overview .btn,
+  .personal-auto-status { grid-column: 1 / -1; margin-left: 0; }
   .setup-input-group { gap: 8px; }
   .setup-input { min-height: 42px; }
 
