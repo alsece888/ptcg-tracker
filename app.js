@@ -983,7 +983,8 @@ function clearAllData() {
       deckListTombstones, historyTombstones, deckTombstones,
       historyClearedAt: now,
     } };
-  stopPersonalAutoRefresh(); // 没有昵称了，自动同步停掉
+  editingHistoryId = null;
+  historyEditBuffer = null;
   saveData();
   render();
   renderPersonalSection();
@@ -1014,6 +1015,65 @@ function toggleAutoRefresh() {
 // ============================================================
 // 个人战绩板块
 // ============================================================
+
+// --- 对局记录 / 战绩口径 ---
+// 手动记录模式：卡组战绩 = 该卡组所有对局记录的胜负合计。
+// 记录是唯一事实来源，界面上的数字全部由它现算，所以编辑/删除一条记录后，
+// 胜场、胜率、对阵分析会立刻跟着变，不会再出现「数字和列表对不上」。
+function entryWins(e) {
+  if (!e) return 0;
+  if (e.deltaWins) return e.deltaWins;
+  return (e.result === 'win' || e.result === '胜') ? 1 : 0;
+}
+
+function entryLosses(e) {
+  if (!e) return 0;
+  if (e.deltaLosses) return e.deltaLosses;
+  return (e.result === 'loss' || e.result === '负') ? 1 : 0;
+}
+
+function entryTime(e) {
+  const t = e && e.time ? Date.parse(e.time) : NaN;
+  if (!isNaN(t)) return t;
+  return (e && e.updatedAt) || 0;
+}
+
+function deckTotalsFromHistory(p) {
+  const totals = {};
+  (p.matchHistory || []).forEach(e => {
+    if (!e || !e.deckId) return;
+    const t = totals[e.deckId] || (totals[e.deckId] = { wins: 0, losses: 0, total: 0 });
+    t.wins += entryWins(e);
+    t.losses += entryLosses(e);
+  });
+  Object.keys(totals).forEach(id => { totals[id].total = totals[id].wins + totals[id].losses; });
+  return totals;
+}
+
+function deckTotalsFor(p, deckId) {
+  return (deckTotalsFromHistory(p)[deckId]) || { wins: 0, losses: 0, total: 0 };
+}
+
+function winRateText(wins, losses) {
+  const total = wins + losses;
+  return total > 0 ? (wins / total * 100).toFixed(1) + '%' : '--';
+}
+
+// 按时间正序逐条累加，得到每条记录「记下那一刻」的累计战绩
+// （不去写存储里的 cumulativeXxx，编辑/删除后由这里现算，字段就不会过期）
+function cumulativeByEntry(history) {
+  const ordered = [...(history || [])].sort((a, b) => entryTime(a) - entryTime(b));
+  const running = {};
+  const out = {};
+  ordered.forEach(e => {
+    if (!e || !e.id) return;
+    const r = running[e.deckId] || (running[e.deckId] = { wins: 0, losses: 0 });
+    r.wins += entryWins(e);
+    r.losses += entryLosses(e);
+    out[e.id] = { wins: r.wins, losses: r.losses };
+  });
+  return out;
+}
 
 function renderPersonalSection() {
   const p = state.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] };
@@ -1059,16 +1119,12 @@ function renderPersonalSection() {
   refreshApiOverview();
 }
 
-// 同一时刻只允许一次刷新在跑：否则并发的两次刷新会各自用旧基准算差额，同一次差额被记两遍
+// 同一时刻只允许一次刷新在跑，避免并发重复打中转
 let apiRefreshInFlight = false;
 
-// 个人战绩自动同步：以前只有「页面加载 / 悬浮窗写入触发 storage 事件 / 手动点按钮」
-// 才会去问 API，页面开着挂一晚上也不会自己记。这里按固定间隔轮询，
-// 打完一局最多等一个间隔就会被记进对局历史。
-const PERSONAL_POLL_MS = 60 * 1000;        // 轮询间隔
-const PERSONAL_MIN_GAP_MS = 20 * 1000;     // 切回标签页/手动刷新时的最小间隔，避免连续打请求
-let personalPollTimer = null;
-let lastPersonalSyncAt = 0;
+// 排位 API 现在只是「只读参考」：刷新它只更新排名/积分那几个数字，不写任何对局记录。
+// 记录一律由用户在「对局历史」里手动添加（点胜/点负），因此这里不再定时轮询。
+let lastApiRefreshAt = 0;
 
 async function refreshApiOverview(opts) {
   opts = opts || {};
@@ -1082,12 +1138,12 @@ async function refreshApiOverview(opts) {
     $('apiTotalWin').textContent = '--'; $('apiTotalLose').textContent = '--';
     $('apiWinRate').textContent = '--'; $('apiTotalGames').textContent = '--';
   };
-  // 自动同步时不把已有数字清成「--」，否则界面上会一直闪
+  // 静默刷新时不把已有数字清成「--」，否则界面上会一直闪
   if (!opts.silent) { defaults(); setApiHint(''); }
   try {
     const [data, tops] = await Promise.all([
       fetchPlayer(p.playerName),
-      // 排名要拉整张排行榜，比较重；自动同步时就不拉了，沿用上次的排名
+      // 排名要拉整张排行榜，比较重；静默刷新时就不拉了，沿用上次的排名
       opts.skipTops ? Promise.resolve(null) : fetchTops().catch(() => []),
     ]);
     if (data && !data.notFound && !data.error) {
@@ -1107,28 +1163,15 @@ async function refreshApiOverview(opts) {
       const apiWins = data.win_total_count || 0;
       const apiLosses = data.lose_total_count || 0;
 
-      // 差额记账（读最新存储 → 算差额 → 写回，见 recordApiDelta）
-      const outcome = recordApiDelta(apiWins, apiLosses);
-      lastPersonalSyncAt = Date.now();
+      // 只留一份排位参考值，对局历史不动（记录全部由手动添加）
+      recordApiSnapshot(apiWins, apiLosses);
+      lastApiRefreshAt = Date.now();
       updatePersonalSyncStatus();
-      renderDeckStats();
-      renderDeckSelector();
-      renderHistory();
-      renderMatchupAnalysis();
-      if (outcome.recorded) {
-        const e = outcome.entry;
-        showToast(opts.silent
-          ? `已自动记录对局：${e.deltaWins} 胜 ${e.deltaLosses} 负`
-          : '战绩已获取，已自动分配差额', 'success');
-      } else if (outcome.rolledBack) {
-        showToast('数据回退（可能跨赛季），已只更新基准值', 'info');
-      } else if (!opts.silent) {
-        showToast('战绩已更新（无新增对局）', 'success');
-      }
+      if (!opts.silent) showToast('排位数据已刷新（只读，不会新增对局记录）', 'success');
     } else if (data && data.error) {
       const detail = (data.reasons && data.reasons.length) ? '（' + data.reasons.join('；') + '）' : '';
-      setApiHint('⚠️ 获取战绩失败：' + data.error + detail + ' — 可在「⋮ → 数据中转」检测可用的中转。', 'error');
-      if (!opts.silent) showToast('获取战绩失败：' + data.error, 'error');
+      setApiHint('⚠️ 刷新排位数据失败：' + data.error + detail + ' — 可在「⋮ → 数据中转」检测可用的中转（只影响上面这几个参考数字，不影响对局记录）。', 'error');
+      if (!opts.silent) showToast('刷新排位数据失败：' + data.error, 'error');
     } else if (data && data.notFound) {
       setApiHint('⚠️ 未查询到玩家「' + ((state.personal || {}).playerName || '') + '」的排位数据：昵称需与游戏内完全一致，且该账号至少打过一场排位。', 'warn');
       if (!opts.silent) showToast('未查询到该玩家的排位数据', 'error');
@@ -1137,106 +1180,35 @@ async function refreshApiOverview(opts) {
     }
   } catch (e) {
     console.warn('获取个人 API 数据失败:', e);
-    setApiHint('⚠️ 获取战绩失败：' + e.message, 'error');
+    setApiHint('⚠️ 刷新排位数据失败：' + e.message, 'error');
     if (!opts.silent) showToast('获取数据失败: ' + e.message, 'error');
   } finally {
     apiRefreshInFlight = false;
   }
 }
 
-// 自动同步的开关与状态显示
+// 状态角标：说明当前是手动记录模式，顺带显示排位参考值的更新时间
 function updatePersonalSyncStatus() {
   const el = $('personalAutoStatus');
   if (!el) return;
   const p = state.personal || {};
   if (!p.playerName) { el.textContent = ''; return; }
-  if (!personalPollTimer) { el.textContent = '自动同步：已停止'; return; }
-  let last = '尚未同步';
-  if (lastPersonalSyncAt) {
-    const d = new Date(lastPersonalSyncAt);
-    last = `上次 ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  }
-  el.textContent = `自动同步：每 ${PERSONAL_POLL_MS / 1000} 秒 · ${last}`;
+  if (!lastApiRefreshAt) { el.textContent = '手动记录 · 排位数据仅作参考'; return; }
+  const d = new Date(lastApiRefreshAt);
+  el.textContent = `手动记录 · 排位数据更新于 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function startPersonalAutoRefresh() {
-  stopPersonalAutoRefresh();
-  personalPollTimer = setInterval(() => {
-    if (!(state.personal && state.personal.playerName)) return;
-    refreshApiOverview({ silent: true, skipTops: true });
-  }, PERSONAL_POLL_MS);
-  updatePersonalSyncStatus();
-}
-
-function stopPersonalAutoRefresh() {
-  if (personalPollTimer) clearInterval(personalPollTimer);
-  personalPollTimer = null;
-  updatePersonalSyncStatus();
-}
-
-// 切回标签页 / 窗口重新获得焦点时立刻补一次（距上次同步太近就跳过）
-function refreshPersonalIfStale() {
-  if (!(state.personal && state.personal.playerName)) return;
-  if (Date.now() - lastPersonalSyncAt < PERSONAL_MIN_GAP_MS) return;
-  refreshApiOverview({ silent: true, skipTops: true });
-}
-
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) refreshPersonalIfStale();
-});
-window.addEventListener('focus', refreshPersonalIfStale);
-
-// 差额记账：基于「最新存储里的 lastApiWins」现取现算，全部同步完成
-// 以前是先取 state.personal 引用再 await 网络，期间任何一次 loadData() 都会让改动落到没人引用的旧对象上
-function recordApiDelta(apiWins, apiLosses) {
-  const outcome = { recorded: false, rolledBack: false };
-  if (!window.PtcgStore) return outcome;
+// 排位基准值：只留一份参考数字，不再据此生成任何对局记录
+// （状态角标和「导出全部数据」还会用到它，所以照旧写回存储）
+function recordApiSnapshot(apiWins, apiLosses) {
+  if (!window.PtcgStore) return;
   const merged = PtcgStore.mutate((d) => {
-    const p = d.personal;
-    if (p.lastApiWins !== undefined) {
-      const deltaWins = apiWins - p.lastApiWins;
-      const deltaLosses = apiLosses - (p.lastApiLosses || 0);
-      if (deltaWins >= 0 && deltaLosses >= 0 && (deltaWins > 0 || deltaLosses > 0)) {
-        const curDeck = p.decks && p.decks[p.currentDeckId];
-        if (curDeck) {
-          curDeck.accumulatedWins = (curDeck.accumulatedWins || 0) + deltaWins;
-          curDeck.accumulatedLosses = (curDeck.accumulatedLosses || 0) + deltaLosses;
-          curDeck.snapshotWins = apiWins;
-          curDeck.snapshotLosses = apiLosses;
-          const newEntry = {
-            id: uuid(),
-            deckId: p.currentDeckId,
-            deckName: curDeck.name,
-            deltaWins,
-            deltaLosses,
-            cumulativeWins: curDeck.accumulatedWins,
-            cumulativeLosses: curDeck.accumulatedLosses,
-            time: new Date().toISOString(),
-          };
-          // 自动填充预输入信息
-          if (p.draftMatch) {
-            if (p.draftMatch.firstMove) newEntry.firstMove = p.draftMatch.firstMove;
-            if (p.draftMatch.opponentDeck) newEntry.opponentDeck = p.draftMatch.opponentDeck;
-            p.draftMatch = { firstMove: null, opponentDeck: '' }; // 消耗后重置
-          }
-          p.matchHistory.push(newEntry);
-          outcome.recorded = true;
-          outcome.entry = newEntry;
-        } else {
-          console.warn('没有当前卡组，差额未记录（先在卡组管理里选一个卡组）');
-        }
-      } else if (deltaWins < 0 || deltaLosses < 0) {
-        outcome.rolledBack = true;
-        console.warn('API 数据回退，跳过差额记录');
-      }
-    }
-    p.lastApiWins = apiWins;
-    p.lastApiLosses = apiLosses;
+    d.personal.lastApiWins = apiWins;
+    d.personal.lastApiLosses = apiLosses;
     return d;
   });
   state = stateFromStore(merged);
   lastWrittenState = JSON.parse(JSON.stringify(merged));
-  return outcome;
 }
 
 function setPersonalPlayer() {
@@ -1252,7 +1224,7 @@ function setPersonalPlayer() {
   if (!state.personal.matchHistory) state.personal.matchHistory = [];
   saveData();
   renderPersonalSection();
-  startPersonalAutoRefresh(); // 刚设好昵称，自动同步跟上去
+  refreshApiOverview(); // 顺手拉一次排位参考数据（只读）
   showToast('已设置个人玩家: ' + name, 'success');
 }
 
@@ -1269,12 +1241,9 @@ function createDeck() {
   }
 
   const id = uuid();
-  const p = state.personal;
   state.personal.decks[id] = {
     name,
     accumulatedWins: 0, accumulatedLosses: 0,
-    snapshotWins: p.lastApiWins ?? 0,
-    snapshotLosses: p.lastApiLosses ?? 0,
   };
   if (!state.personal.currentDeckId || !state.personal.decks[state.personal.currentDeckId]) {
     state.personal.currentDeckId = id;
@@ -1292,17 +1261,8 @@ function selectDeck() {
   if (!val || val === state.personal.currentDeckId) return;
 
   const p = state.personal;
-
-  // 结算旧卡组：将最后一次 API 到当前的差额计入旧卡组
-  settleCurrentDeck();
-
-  // 切换并给新卡组拍快照
   p.currentDeckId = val;
   const newDeck = p.decks[val];
-  if (newDeck) {
-    newDeck.snapshotWins = p.lastApiWins ?? 0;
-    newDeck.snapshotLosses = p.lastApiLosses ?? 0;
-  }
 
   saveData();
   renderDeckSelector();
@@ -1310,28 +1270,6 @@ function selectDeck() {
   renderHistory();
   renderMatchupAnalysis();
   showToast('已切换到卡组: ' + (newDeck ? newDeck.name : ''), 'success');
-}
-
-// 结算当前卡组：将 lastApi - snapshot 的差额累加到 accumulated
-function settleCurrentDeck() {
-  const p = state.personal;
-  if (!p.currentDeckId) return;
-  const deck = p.decks[p.currentDeckId];
-  if (!deck) return;
-  if (p.lastApiWins === undefined && p.lastApiLosses === undefined) return;
-
-  const apiW = p.lastApiWins || 0;
-  const apiL = p.lastApiLosses || 0;
-  const snapW = deck.snapshotWins || 0;
-  const snapL = deck.snapshotLosses || 0;
-
-  const deltaW = apiW - snapW;
-  const deltaL = apiL - snapL;
-
-  if (deltaW > 0 || deltaL > 0) {
-    deck.accumulatedWins = (deck.accumulatedWins || 0) + Math.max(0, deltaW);
-    deck.accumulatedLosses = (deck.accumulatedLosses || 0) + Math.max(0, deltaL);
-  }
 }
 
 function renameDeck(id) {
@@ -1381,6 +1319,10 @@ function deleteDeck(id) {
     const remaining = Object.keys(state.personal.decks);
     state.personal.currentDeckId = remaining.length > 0 ? remaining[0] : null;
   }
+  // 记录卡里若正选着这个卡组，改回「跟随当前卡组」
+  if (state.personal.draftMatch && state.personal.draftMatch.deckId === id) {
+    state.personal.draftMatch.deckId = null;
+  }
   saveData();
   renderDeckList();
   renderDeckSelector();
@@ -1403,8 +1345,6 @@ function clearHistory() {
   Object.values(p.decks || {}).forEach(d => {
     d.accumulatedWins = 0;
     d.accumulatedLosses = 0;
-    d.snapshotWins = 0;
-    d.snapshotLosses = 0;
   });
   saveData();
   renderDeckStats();
@@ -1420,6 +1360,7 @@ function clearHistory() {
 function renderDeckSelector() {
   const p = state.personal;
   const decks = p.decks || {};
+  const totals = deckTotalsFromHistory(p);
   const sel = $('deckSelector');
   const ids = Object.keys(decks);
   if (ids.length === 0) {
@@ -1427,9 +1368,7 @@ function renderDeckSelector() {
   } else {
     sel.innerHTML = ids.map(id => {
       const d = decks[id];
-      const accW = d.accumulatedWins || 0;
-      const accL = d.accumulatedLosses || 0;
-      const total = accW + accL;
+      const total = (totals[id] || {}).total || 0;
       return `<option value="${id}" ${id === p.currentDeckId ? 'selected' : ''}>${esc(d.name)} (${total}场)</option>`;
     }).join('');
   }
@@ -1446,21 +1385,12 @@ function renderDeckStats() {
     $('deckWinRate').textContent = '--';
     return;
   }
-  // 当前实时战绩 = 累计 + (最近一次API - 快照)
-  const accW = cur.accumulatedWins || 0;
-  const accL = cur.accumulatedLosses || 0;
-  const apiW = p.lastApiWins ?? (cur.snapshotWins ?? 0);
-  const apiL = p.lastApiLosses ?? (cur.snapshotLosses ?? 0);
-  const snapW = cur.snapshotWins || 0;
-  const snapL = cur.snapshotLosses || 0;
-
-  const currentW = accW + Math.max(0, apiW - snapW);
-  const currentL = accL + Math.max(0, apiL - snapL);
-
-  $('deckWins').textContent = currentW;
-  $('deckLosses').textContent = currentL;
-  $('deckTotal').textContent = currentW + currentL;
-  $('deckWinRate').textContent = (currentW + currentL) > 0 ? (currentW / (currentW + currentL) * 100).toFixed(1) + '%' : '--';
+  // 战绩 = 这个卡组的对局记录合计（手动记录，唯一事实来源）
+  const t = deckTotalsFor(p, p.currentDeckId);
+  $('deckWins').textContent = t.wins;
+  $('deckLosses').textContent = t.losses;
+  $('deckTotal').textContent = t.total;
+  $('deckWinRate').textContent = winRateText(t.wins, t.losses);
 }
 
 function renderDeckList() {
@@ -1474,15 +1404,12 @@ function renderDeckList() {
   }
   container.innerHTML = ids.map(id => {
     const d = decks[id];
-    const accW = d.accumulatedWins || 0;
-    const accL = d.accumulatedLosses || 0;
-    const total = accW + accL;
-    const wr = total > 0 ? (accW / total * 100).toFixed(1) : '--';
+    const t = deckTotalsFor(p, id);
     const isActive = id === p.currentDeckId;
     return `<div class="deck-item ${isActive ? 'active' : ''}">
       <div class="deck-item-info">
         <span class="deck-item-name">${esc(d.name)}</span>
-        <span class="deck-item-meta">${accW}胜 ${accL}败 · ${total}场 · 胜率${wr}%</span>
+        <span class="deck-item-meta">${t.wins}胜 ${t.losses}败 · ${t.total}场 · 胜率${winRateText(t.wins, t.losses)}</span>
         ${isActive ? '<span style="font-size:11px;color:var(--accent);">● 当前</span>' : ''}
       </div>
       <div class="deck-item-actions">
@@ -1784,8 +1711,8 @@ function renderMatchupAnalysis() {
   history.forEach(h => {
     const opp = h.opponentDeck;
     if (!matchup[opp]) matchup[opp] = { wins: 0, losses: 0 };
-    matchup[opp].wins += (h.deltaWins || 0);
-    matchup[opp].losses += (h.deltaLosses || 0);
+    matchup[opp].wins += entryWins(h);
+    matchup[opp].losses += entryLosses(h);
   });
 
   const rows = Object.entries(matchup)
@@ -1819,37 +1746,239 @@ function renderMatchupAnalysis() {
 }
 
 // ============================================================
-// 预输入草案卡片渲染
+// 手动记录对局（记录卡 + 对局列表）
 // ============================================================
 
-function renderDraftCard(draft, deckList) {
-  const firstMove = draft.firstMove;
-  const opp = draft.opponentDeck || '';
+// 这条记录的胜负方向（'win' / 'loss' / null 表示还没填）
+function resultOfEntry(e) {
+  const w = entryWins(e);
+  const l = entryLosses(e);
+  if (w > 0 && w >= l) return 'win';
+  if (l > 0 && l >= w) return 'loss';
+  return null;
+}
 
-  const selectOptions = deckList.map(dl => {
+function formatEntryTime(e) {
+  const t = entryTime(e);
+  if (!t) return '';
+  const d = new Date(t);
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// 记录卡表单：存在存储里（沿用 draftMatch 字段），刷新、悬浮窗、换标签页都不会丢
+function ensureRecordForm() {
+  const p = state.personal;
+  if (!p.draftMatch || typeof p.draftMatch !== 'object') {
+    p.draftMatch = { deckId: null, firstMove: null, opponentDeck: '' };
+    saveData();
+  }
+  const f = p.draftMatch;
+  if (f.deckId === undefined) f.deckId = null;
+  if (f.firstMove === undefined) f.firstMove = null;
+  if (f.opponentDeck === undefined) f.opponentDeck = '';
+  return f;
+}
+
+// 这一局记到哪个卡组：表单里选了就用它，没选就跟随「当前卡组」
+function recordTargetDeckId() {
+  const p = state.personal;
+  const f = ensureRecordForm();
+  if (f.deckId && p.decks && p.decks[f.deckId]) return f.deckId;
+  return p.currentDeckId;
+}
+
+function renderRecordCard(form, deckList, decks) {
+  const ids = Object.keys(decks || {});
+  if (ids.length === 0) {
+    return `<div class="history-item record-card">
+      <span class="draft-tag">记</span>
+      <span style="font-size:13px;color:var(--text-muted);">先在上方「⚙ 管理」里建一个卡组，之后就能在这里记录对局了</span>
+    </div>`;
+  }
+
+  const targetId = (form.deckId && decks[form.deckId]) ? form.deckId : (state.personal.currentDeckId || '');
+  const deckOptions = ids.map(id => {
+    const sel = id === targetId ? ' selected' : '';
+    return `<option value="${esc(id)}"${sel}>${esc(decks[id].name)}</option>`;
+  }).join('');
+
+  const opp = form.opponentDeck || '';
+  const oppOptions = (deckList || []).map(dl => {
     const sel = dl.name === opp ? ' selected' : '';
     return `<option value="${esc(dl.name)}"${sel}>${esc(dl.name)}</option>`;
   }).join('');
 
-  // 先后手按钮
-  const turnLeft = firstMove === 'first'
-    ? '<button class="btn-turn active" onclick="saveDraftTurn(\'first\')">先</button>'
-    : '<button class="btn-turn" onclick="saveDraftTurn(\'first\')">先</button>';
-  const turnRight = firstMove === 'second'
-    ? '<button class="btn-turn active second" onclick="saveDraftTurn(\'second\')">后</button>'
-    : '<button class="btn-turn second" onclick="saveDraftTurn(\'second\')">后</button>';
+  const turnBtn = (turn, label, cls) => {
+    const active = form.firstMove === turn;
+    return `<button class="btn-turn ${active ? cls : 'gray'}" onclick="setRecordTurn('${turn}')" title="再点一次取消">${label}</button>`;
+  };
 
-  return `<div class="history-item draft-card">
-    <div class="history-left">
-      <span class="draft-tag" title="预输入">预</span>
-      <span class="history-turn">${turnLeft}${turnRight}</span>
-      <select class="history-opponent-select" id="draftOpponentSelect" onchange="saveDraftOpponent()">
-        <option value="">${opp ? '-- 未设置 --' : '+ 对手卡组'}</option>
-        ${selectOptions}
+  return `<div class="history-item record-card">
+    <div class="record-fields">
+      <span class="draft-tag" title="手动记录">记</span>
+      <span class="record-label">我方</span>
+      <select class="history-opponent-select" id="recordDeckSelect" onchange="setRecordDeck(this.value)" title="这一局用的卡组">${deckOptions}</select>
+      <span class="record-sep"></span>
+      <span class="record-label">先后手</span>
+      <span class="history-turn">${turnBtn('first', '先', 'active')}${turnBtn('second', '后', 'active second')}</span>
+      <span class="record-sep"></span>
+      <span class="record-label">对手</span>
+      <select class="history-opponent-select" id="recordOpponentSelect" onchange="setRecordOpponent(this.value)" title="对手用的卡组，可留空">
+        <option value="">${opp ? '-- 清空 --' : '+ 选择对手卡组'}</option>
+        ${oppOptions}
       </select>
     </div>
+    <div class="record-buttons">
+      <button class="btn-result win" onclick="recordMatch('win')">胜</button>
+      <button class="btn-result loss" onclick="recordMatch('loss')">负</button>
+      <button class="btn-history-action danger" onclick="resetRecordForm()" title="清空上面选的内容">✕</button>
+    </div>
+  </div>`;
+}
+
+// 记一局：点「胜」或「负」落一条记录，战绩立刻重算
+function recordMatch(result) {
+  const p = state.personal;
+  const form = ensureRecordForm();
+  const deckId = recordTargetDeckId();
+  const deck = deckId ? (p.decks || {})[deckId] : null;
+  if (!deck) { showToast('请先创建并选择一个卡组', 'error'); return; }
+
+  const entry = {
+    id: uuid(),
+    deckId,
+    deckName: deck.name,
+    deltaWins: result === 'win' ? 1 : 0,
+    deltaLosses: result === 'loss' ? 1 : 0,
+    result,
+    manual: true,
+    time: new Date().toISOString(),
+  };
+  if (form.firstMove) entry.firstMove = form.firstMove;
+  if (form.opponentDeck) entry.opponentDeck = form.opponentDeck;
+
+  if (!p.matchHistory) p.matchHistory = [];
+  p.matchHistory.push(entry);
+  // 对手每局都不一样，记完就清掉，免得下一局误带上；先后手保留（同一轮多半一致）
+  form.opponentDeck = '';
+
+  saveData();
+  renderDeckStats();
+  renderDeckSelector();
+  renderDeckList();
+  renderMatchupAnalysis();
+  renderHistory();
+
+  const list = $('historyList');
+  if (list) list.scrollTop = 0;
+  const t = deckTotalsFor(state.personal, deckId);
+  showToast(`已记录：${deck.name} ${result === 'win' ? '胜' : '负'} · 现${t.wins}胜${t.losses}败`, 'success');
+}
+
+function setRecordTurn(turn) {
+  const f = ensureRecordForm();
+  f.firstMove = f.firstMove === turn ? null : turn; // 再点一次＝取消
+  saveData();
+  renderHistory();
+}
+
+// 下面两个只改选择、不重画列表：重画会把刚选好的下拉框重建掉
+function setRecordDeck(val) {
+  ensureRecordForm().deckId = val || null;
+  saveData();
+}
+
+function setRecordOpponent(val) {
+  ensureRecordForm().opponentDeck = val || '';
+  saveData();
+}
+
+function resetRecordForm() {
+  state.personal.draftMatch = { deckId: null, firstMove: null, opponentDeck: '' };
+  saveData();
+  renderHistory();
+}
+
+// 从「记一局对局」按钮滚到记录卡
+function focusRecordCard() {
+  const card = $('personalHistory');
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  card.classList.remove('flash');
+  void card.offsetWidth; // 重启动画
+  card.classList.add('flash');
+  setTimeout(() => card.classList.remove('flash'), 1400);
+  const list = $('historyList');
+  if (list) list.scrollTop = 0;
+}
+
+function historyTurnBadges(id, firstMove) {
+  const firstCls = firstMove === 'first' ? 'btn-turn active' : (firstMove ? 'btn-turn gray' : 'btn-turn');
+  const secondCls = firstMove === 'second' ? 'btn-turn active second' : (firstMove ? 'btn-turn gray' : 'btn-turn second');
+  return `<button class="${firstCls}" onclick="editHistoryEntry('${esc(id)}')" title="点击修改先后手">先</button>` +
+         `<button class="${secondCls}" onclick="editHistoryEntry('${esc(id)}')" title="点击修改先后手">后</button>`;
+}
+
+function renderHistoryItem(h, deckList, cum) {
+  const timeStr = formatEntryTime(h);
+  const result = resultOfEntry(h);
+  const resultClass = result === 'win' ? 'win' : (result === 'loss' ? 'loss' : '');
+  const resultText = result === 'win' ? '胜' : (result === 'loss' ? '负' : '-');
+  const cumHtml = cum
+    ? `<span class="history-cumulative">累计 ${cum.wins}胜 ${cum.losses}败</span>`
+    : '<span class="history-cumulative">旧版记录</span>';
+
+  // 编辑态：改动先进缓冲区，点 ✓ 才落盘
+  if (editingHistoryId === h.id && historyEditBuffer) {
+    const buf = historyEditBuffer;
+    const oppOptions = (deckList || []).map(dl => {
+      const sel = dl.name === buf.opponentDeck ? ' selected' : '';
+      return `<option value="${esc(dl.name)}"${sel}>${esc(dl.name)}</option>`;
+    }).join('');
+    return `<div class="history-item history-item-editing">
+      <div class="history-left">
+        <span class="history-deck-name">${esc(h.deckName)}</span>
+        <span class="history-turn">
+          <button class="btn-turn ${buf.firstMove === 'first' ? 'active' : 'gray'}" onclick="editSetTurn('first')" title="设为先手（再点一次取消）">先</button>
+          <button class="btn-turn ${buf.firstMove === 'second' ? 'active second' : 'gray'}" onclick="editSetTurn('second')" title="设为后手（再点一次取消）">后</button>
+        </span>
+        <span class="history-turn">
+          <button class="btn-turn ${buf.result === 'win' ? 'active' : 'gray'}" onclick="editSetResult('win')" title="改成胜">胜</button>
+          <button class="btn-turn ${buf.result === 'loss' ? 'active lose' : 'gray'}" onclick="editSetResult('loss')" title="改成负">负</button>
+        </span>
+        <select class="history-opponent-select" id="histEditSelect_${esc(h.id)}" onchange="editSetOpponent(this.value)">
+          <option value="">-- 对手未知 --</option>
+          ${oppOptions}
+        </select>
+        <span class="history-time">${timeStr}</span>
+      </div>
+      <div class="history-right">
+        <button class="btn-history-action" onclick="commitHistoryEdit()" title="保存">✓</button>
+        <button class="btn-history-action danger" onclick="cancelHistoryEdit()" title="取消">✕</button>
+        <button class="btn-history-action danger" onclick="deleteHistoryEntry('${esc(h.id)}')" title="删除这条记录">🗑</button>
+      </div>
+    </div>`;
+  }
+
+  const opponentDeck = h.opponentDeck || '';
+  const deckEntry = opponentDeck ? (deckList || []).find(dl => dl.name === opponentDeck) : null;
+  const opponentIcons = deckEntry ? renderDeckIcons(deckEntry.icons, 18) : '';
+  const opponentHtml = opponentDeck
+    ? `<span class="history-opponent" onclick="editHistoryEntry('${esc(h.id)}')" style="cursor:pointer;" title="点击编辑这条记录">${opponentIcons} vs ${esc(opponentDeck)}</span>`
+    : `<span class="history-opponent empty" onclick="editHistoryEntry('${esc(h.id)}')" title="点击编辑这条记录">+ 对手卡组</span>`;
+
+  return `<div class="history-item">
+    <div class="history-left">
+      <span class="history-deck-name">${esc(h.deckName)}</span>
+      <span class="history-turn">${historyTurnBadges(h.id, h.firstMove)}</span>
+      <span class="history-result ${resultClass}" onclick="editHistoryEntry('${esc(h.id)}')" style="cursor:pointer;" title="点击修改这一局的胜负">${resultText}</span>
+      ${cumHtml}
+      <span class="history-time">${timeStr}</span>
+    </div>
     <div class="history-right">
-      <button class="btn-history-action danger" onclick="clearDraft()" title="清除预输入">✕</button>
+      ${opponentHtml}
+      <button class="btn-history-action" onclick="editHistoryEntry('${esc(h.id)}')" title="编辑这条记录">✏</button>
+      <button class="btn-history-action danger row-del" onclick="deleteHistoryEntry('${esc(h.id)}')" title="删除这条记录">🗑</button>
     </div>
   </div>`;
 }
@@ -1858,185 +1987,117 @@ function renderHistory() {
   const p = state.personal;
   const history = p.matchHistory || [];
   const listContainer = $('historyList');
-  const emptyEl = $('historyEmpty');
   const deckList = p.deckList || [];
+  const cumById = cumulativeByEntry(history);
 
-  // 预输入草案默认始终存在
-  ensureDraft();
-  const draft = p.draftMatch;
-  const draftHtml = renderDraftCard(draft, deckList);
-
-  emptyEl.style.display = 'none';
-
+  // 记录卡永远排在列表最上面
+  const recordHtml = renderRecordCard(ensureRecordForm(), deckList, p.decks || {});
   // 倒序显示（最新的在上面）
-  const reversed = [...history].reverse();
-  listContainer.innerHTML = draftHtml + reversed.map(h => {
-    const d = new Date(h.time);
-    const timeStr = `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    const opponentDeck = h.opponentDeck || '';
-    // 兼容早期的「手工记录」（只有 result 字段，没有 deltaWins/deltaLosses）——这类记录以前会被静默丢掉
-    const legacyWin = h.result === 'win' || h.result === '胜';
-    const legacyLoss = h.result === 'loss' || h.result === '负';
-    const resultClass = h.deltaWins > 0 ? 'win' : (h.deltaLosses > 0 ? 'loss' : (legacyWin ? 'win' : (legacyLoss ? 'loss' : '')));
-    const resultText = h.deltaWins > 0 ? '胜' : (h.deltaLosses > 0 ? '负' : (legacyWin ? '胜' : (legacyLoss ? '负' : '-')));
-    const cumHtml = (h.cumulativeWins === undefined && h.cumulativeLosses === undefined)
-      ? '<span class="history-cumulative">旧版记录</span>'
-      : `<span class="history-cumulative">累计 ${h.cumulativeWins || 0}胜 ${h.cumulativeLosses || 0}败</span>`;
+  const ordered = [...history].sort((a, b) => entryTime(b) - entryTime(a));
+  listContainer.innerHTML = recordHtml + ordered.map(h => renderHistoryItem(h, deckList, cumById[h.id])).join('');
 
-    // 下拉选项（select 不支持图片，仅显示名称）
-    const selectOptions = deckList.map(dl => {
-      const sel = dl.name === opponentDeck ? ' selected' : '';
-      return `<option value="${esc(dl.name)}"${sel}>${esc(dl.name)}</option>`;
-    }).join('');
-
-    const turnHtml = renderHistoryTurn(h.id, h.firstMove);
-
-    // 编辑模式
-    if (editingHistoryId === h.id) {
-      return `<div class="history-item history-item-editing">
-        <div class="history-left">
-          <span class="history-deck-name">${esc(h.deckName)}</span>
-          <span class="history-turn">${turnHtml}</span>
-          <span class="history-result ${resultClass}">${resultText}</span>
-          ${cumHtml}
-          <span class="history-time">${timeStr}</span>
-        </div>
-        <div class="history-right">
-          <select class="history-opponent-select" id="histEditSelect_${esc(h.id)}">
-            <option value="">-- 未设置 --</option>
-            ${selectOptions}
-          </select>
-          <button class="btn-history-action" onclick="saveHistoryOpponent('${esc(h.id)}')" title="保存">✓</button>
-          <button class="btn-history-action danger" onclick="cancelEditHistory()" title="取消">✕</button>
-        </div>
-      </div>`;
-    }
-
-    // 正常显示模式
-    const deckEntry = opponentDeck ? (deckList.find(dl => dl.name === opponentDeck)) : null;
-    const opponentIcons = deckEntry ? renderDeckIcons(deckEntry.icons, 18) : '';
-    const opponentHtml = opponentDeck
-      ? `<span class="history-opponent" onclick="editHistoryOpponent('${esc(h.id)}')" style="cursor:pointer;" title="点击修改">${opponentIcons} vs ${esc(opponentDeck)}</span>`
-      : `<span class="history-opponent empty" onclick="editHistoryOpponent('${esc(h.id)}')">+ 对手卡组</span>`;
-
-    return `<div class="history-item">
-      <div class="history-left">
-        <span class="history-deck-name">${esc(h.deckName)}</span>
-        <span class="history-turn">${turnHtml}</span>
-        <span class="history-result ${resultClass}">${resultText}</span>
-        ${cumHtml}
-        <span class="history-time">${timeStr}</span>
-      </div>
-      <div class="history-right">
-        ${opponentHtml}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function renderHistoryTurn(id, firstMove) {
-  const isEditing = editingHistoryId === id;
-  if (isEditing) {
-    return `
-      <button class="btn-turn ${firstMove === 'first' ? 'active' : 'gray'}" onclick="saveHistoryTurn('${esc(id)}', 'first')">先</button>
-      <button class="btn-turn ${firstMove === 'second' ? 'active' : 'gray'}" onclick="saveHistoryTurn('${esc(id)}', 'second')">后</button>
-    `;
-  }
-  if (firstMove === 'first') {
-    return `<button class="btn-turn active" onclick="editHistoryTurn('${esc(id)}')">先</button>`;
-  }
-  if (firstMove === 'second') {
-    return `<button class="btn-turn active second" onclick="editHistoryTurn('${esc(id)}')">后</button>`;
-  }
-  return `
-    <button class="btn-turn" onclick="saveHistoryTurn('${esc(id)}', 'first')">先</button>
-    <button class="btn-turn second" onclick="saveHistoryTurn('${esc(id)}', 'second')">后</button>
-  `;
-}
-
-function editHistoryTurn(id) {
-  editingHistoryId = id;
-  renderHistory();
-}
-
-function saveHistoryTurn(id, turn) {
-  const history = state.personal.matchHistory || [];
-  const entry = history.find(h => h.id === id);
-  if (entry) {
-    entry.firstMove = turn;
-    saveData();
-    showToast('先后手已保存', 'success');
-  }
-  editingHistoryId = null;
-  renderHistory();
+  const emptyEl = $('historyEmpty');
+  if (emptyEl) emptyEl.style.display = 'none';
 }
 
 // ============================================================
-// 预输入草案（新对局）
+// 编辑 / 删除一条对局记录
 // ============================================================
 
-function ensureDraft() {
-  const p = state.personal;
-  if (!p.draftMatch) {
-    p.draftMatch = { firstMove: null, opponentDeck: '' };
-    saveData();
-  }
-}
+// 编辑缓冲区：改先后手/胜负/对手都先记在这里，点 ✓ 才写进存储
+let historyEditBuffer = null;
 
-function saveDraftTurn(turn) {
-  ensureDraft();
-  state.personal.draftMatch.firstMove = turn;
-  saveData();
-  renderHistory();
-}
-
-function saveDraftOpponent() {
-  const sel = document.getElementById('draftOpponentSelect');
-  if (!sel) return;
-  ensureDraft();
-  state.personal.draftMatch.opponentDeck = sel.value;
-  saveData();
-  renderHistory();
-}
-
-function clearDraft() {
-  state.personal.draftMatch = { firstMove: null, opponentDeck: '' };
-  saveData();
-  renderHistory();
-}
-
-function editHistoryOpponent(id) {
+function editHistoryEntry(id) {
+  const entry = (state.personal.matchHistory || []).find(h => h.id === id);
+  if (!entry) return;
   editingHistoryId = id;
+  historyEditBuffer = {
+    id,
+    firstMove: entry.firstMove || null,
+    result: resultOfEntry(entry),
+    opponentDeck: entry.opponentDeck || '',
+  };
   renderHistory();
   const sel = document.getElementById('histEditSelect_' + id);
   if (sel) sel.focus();
 }
 
-function cancelEditHistory() {
-  editingHistoryId = null;
-  editingDeckListId = null;
+function editSetTurn(turn) {
+  if (!historyEditBuffer) return;
+  historyEditBuffer.firstMove = historyEditBuffer.firstMove === turn ? null : turn;
   renderHistory();
-  renderDeckListManage();
 }
 
-function saveHistoryOpponent(id) {
-  const sel = document.getElementById('histEditSelect_' + id);
-  if (!sel) { editingHistoryId = null; renderHistory(); return; }
-  const val = sel.value;
-  const history = state.personal.matchHistory || [];
-  const entry = history.find(h => h.id === id);
-  if (entry) {
-    if (val) {
-      entry.opponentDeck = val;
-    } else {
-      delete entry.opponentDeck;
-    }
-    saveData();
-    showToast('对手卡组已更新', 'success');
-  }
-  editingHistoryId = null;
+function editSetResult(result) {
+  if (!historyEditBuffer) return;
+  historyEditBuffer.result = historyEditBuffer.result === result ? null : result;
   renderHistory();
+}
+
+// 改下拉框不重画：重画会把刚选好的 select 重建掉
+function editSetOpponent(val) {
+  if (historyEditBuffer) historyEditBuffer.opponentDeck = val || '';
+}
+
+function commitHistoryEdit() {
+  const buf = historyEditBuffer;
+  const entry = buf ? (state.personal.matchHistory || []).find(h => h.id === buf.id) : null;
+  if (!buf || !entry) { cancelHistoryEdit(); return; }
+
+  // 胜负方向没变就别动原有的数字：旧记录可能是 2 胜 0 负（一次记了两局）
+  if (buf.result !== resultOfEntry(entry)) {
+    if (buf.result === 'win') {
+      entry.deltaWins = 1; entry.deltaLosses = 0; entry.result = 'win';
+    } else if (buf.result === 'loss') {
+      entry.deltaWins = 0; entry.deltaLosses = 1; entry.result = 'loss';
+    } else {
+      delete entry.deltaWins; delete entry.deltaLosses; delete entry.result;
+    }
+  } else if (buf.result) {
+    entry.result = buf.result;
+  }
+
+  if (buf.firstMove) entry.firstMove = buf.firstMove; else delete entry.firstMove;
+  if (buf.opponentDeck) entry.opponentDeck = buf.opponentDeck; else delete entry.opponentDeck;
+
+  editingHistoryId = null;
+  historyEditBuffer = null;
+  saveData();
+  renderDeckStats();
+  renderDeckSelector();
+  renderDeckList();
   renderMatchupAnalysis();
+  renderHistory();
+  showToast('记录已更新', 'success');
+}
+
+function cancelHistoryEdit() {
+  editingHistoryId = null;
+  historyEditBuffer = null;
+  renderHistory();
+}
+
+function deleteHistoryEntry(id) {
+  const p = state.personal;
+  const entry = (p.matchHistory || []).find(h => h.id === id);
+  if (!entry) return;
+  const r = resultOfEntry(entry);
+  const label = `${entry.deckName || ''} ${r === 'win' ? '胜' : (r === 'loss' ? '负' : '未填胜负')}`;
+  if (!confirm(`删除这条记录吗？\n${label} · ${formatEntryTime(entry)}`)) return;
+
+  p.matchHistory = (p.matchHistory || []).filter(h => h.id !== id);
+  // 删除写墓碑：另一个还开着的窗口用旧快照保存时不会把它带回来
+  if (!p.historyTombstones) p.historyTombstones = {};
+  p.historyTombstones[id] = Date.now();
+  if (editingHistoryId === id) { editingHistoryId = null; historyEditBuffer = null; }
+
+  saveData();
+  renderDeckStats();
+  renderDeckSelector();
+  renderDeckList();
+  renderMatchupAnalysis();
+  renderHistory();
+  showToast('记录已删除');
 }
 
 function exportHistory() {
@@ -2046,20 +2107,24 @@ function exportHistory() {
     return;
   }
 
-  const headers = ['时间', '使用卡组', '胜场增量', '败场增量', '累计胜场', '累计败场', '对手卡组', '先后手'];
-  const rows = history.map(h => {
-    const d = new Date(h.time);
+  const headers = ['时间', '使用卡组', '结果', '对手卡组', '先后手', '胜场增量', '败场增量', '累计胜场', '累计败场'];
+  const cumById = cumulativeByEntry(history);
+  const rows = [...history].sort((a, b) => entryTime(a) - entryTime(b)).map(h => {
+    const d = new Date(entryTime(h) || Date.now());
     const timeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     const turnMap = { first: '先攻', second: '后攻' };
+    const r = resultOfEntry(h);
+    const cum = cumById[h.id] || { wins: 0, losses: 0 };
     return [
       timeStr,
       h.deckName || '',
-      h.deltaWins || 0,
-      h.deltaLosses || 0,
-      h.cumulativeWins || 0,
-      h.cumulativeLosses || 0,
+      r === 'win' ? '胜' : (r === 'loss' ? '负' : '未知'),
       h.opponentDeck || '',
       turnMap[h.firstMove] || '',
+      entryWins(h),
+      entryLosses(h),
+      cum.wins,
+      cum.losses,
     ];
   });
 
@@ -2078,7 +2143,10 @@ function exportHistory() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `ptcg-对局历史-${new Date().toISOString().slice(0, 10)}.csv`;
+  // 用本地日期做文件名（toISOString 是 UTC，晚上导出会差一天）
+  const today = new Date();
+  const stamp = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  a.download = `ptcg-对局历史-${stamp}.csv`;
   a.click();
   URL.revokeObjectURL(url);
   showToast(`已导出 ${history.length} 条对局历史`, 'success');
@@ -2416,7 +2484,7 @@ $('personalPlayerInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); setPersonalPlayer(); }
 });
 $('personalRefreshApiBtn').addEventListener('click', refreshApiOverview);
-$('personalFetchBtn').addEventListener('click', refreshApiOverview);
+$('goRecordBtn').addEventListener('click', focusRecordCard);
 $('deckSelector').addEventListener('change', selectDeck);
 $('manageDecksBtn').addEventListener('click', openDeckManage);
 $('closeDeckManageBtn').addEventListener('click', closeDeckManage);
@@ -2481,9 +2549,19 @@ window.deleteDeck = deleteDeck;
 window.renameDeck = renameDeck;
 window.startRenameDeck = startRenameDeck;
 window.renderDeckList = renderDeckList;
-window.editHistoryOpponent = editHistoryOpponent;
-window.saveHistoryOpponent = saveHistoryOpponent;
-window.cancelEditHistory = cancelEditHistory;
+// 对局记录：手动记录 + 编辑/删除
+window.recordMatch = recordMatch;
+window.setRecordTurn = setRecordTurn;
+window.setRecordDeck = setRecordDeck;
+window.setRecordOpponent = setRecordOpponent;
+window.resetRecordForm = resetRecordForm;
+window.editHistoryEntry = editHistoryEntry;
+window.editSetTurn = editSetTurn;
+window.editSetResult = editSetResult;
+window.editSetOpponent = editSetOpponent;
+window.commitHistoryEdit = commitHistoryEdit;
+window.cancelHistoryEdit = cancelHistoryEdit;
+window.deleteHistoryEntry = deleteHistoryEntry;
 window.toggleDeckListIcon = toggleDeckListIcon;
 window.removeDeckFromList = removeDeckFromList;
 window.startEditDeckList = startEditDeckList;
@@ -2581,10 +2659,10 @@ async function testRelays() {
 
   const okList = items.filter((p) => results[p.id] && results[p.id].ok);
   if (okList.length) {
-    $('relayMsg').textContent = `可用中转 ${okList.length} 个：${okList.map((p) => p.name).join('、')}（获取战绩时它们会同时发起，谁快用谁）`;
+    $('relayMsg').textContent = `可用中转 ${okList.length} 个：${okList.map((p) => p.name).join('、')}（刷新排位数据时它们会同时发起，谁快用谁）`;
     $('relayMsg').className = 'paste-msg success';
   } else {
-    $('relayMsg').textContent = '公共中转全部不可用。建议按 RELAY.md 自建一个中转后填在上方；若这里能连上而获取战绩仍失败，多半是浏览器插件或代理挡住了这些域名。';
+    $('relayMsg').textContent = '公共中转全部不可用。建议按 RELAY.md 自建一个中转后填在上方；若这里能连上而刷新排位数据仍失败，多半是浏览器插件或代理挡住了这些域名。';
     $('relayMsg').className = 'paste-msg error';
   }
   $('relayTestBtn').disabled = false;
@@ -3031,9 +3109,7 @@ checkAndImportMigrationData();
 loadData();
 render();
 renderPersonalSection();
-
-// 已设置昵称的话，开启个人战绩自动同步（每 60 秒问一次，打完一局最多等一个间隔就记上）
-if (state.personal && state.personal.playerName) startPersonalAutoRefresh();
+// 对局记录一律手动添加（记录卡里点胜/负），因此这里不再起定时同步
 
 // 旧域名检测迁移横幅
 checkDomainMigration();

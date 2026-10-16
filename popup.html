@@ -344,6 +344,40 @@ body {
 .api-mini-item .ami-lbl { font-size: 10px; color: var(--text-3); margin-top: 1px; }
 .api-mini-divider { width: 1px; background: var(--divider); }
 
+/* ===== 快速记录 ===== */
+.quick-record { padding: 9px 12px; }
+.qr-row { display: flex; align-items: center; gap: 6px; }
+.qr-row + .qr-row { margin-top: 7px; }
+.qr-row .hist-turn { display: inline-flex; gap: 3px; flex-shrink: 0; }
+.qr-opp { flex: 1; min-width: 0; }
+.qr-btn {
+  flex: 1;
+  border: none;
+  border-radius: 9px;
+  padding: 8px 0;
+  font-size: 14px;
+  font-weight: 800;
+  font-family: var(--font);
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.12s, filter 0.12s;
+}
+.qr-btn.win { background: var(--accent); box-shadow: 0 3px 12px var(--accent-glow); }
+.qr-btn.loss { background: var(--danger); box-shadow: 0 3px 12px var(--danger-glow); }
+.qr-btn:hover { filter: brightness(1.08); }
+.qr-btn:active { transform: scale(0.97); }
+.qr-hint {
+  font-size: 10px;
+  color: var(--text-3);
+  font-family: var(--mono);
+  text-align: center;
+  padding-top: 5px;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ===== History ===== */
 .history-section { padding: 10px 14px; }
 .history-title {
@@ -499,12 +533,13 @@ body {
 }
 .hist-btn-mini:hover { color: var(--accent); }
 .hist-btn-mini.cancel:hover { color: var(--danger); }
+.hist-btn-mini.on {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 800;
+}
 .hist-time { font-size: 10px; color: var(--text-3); font-family: var(--mono); flex-shrink: 0; margin-left: 4px; }
 .hist-empty { text-align: center; padding: 14px 8px; color: var(--text-3); font-size: 11px; }
-
-/* 预输入草案卡片：与普通记录同结构，颜色区分 */
-.hist-item.draft-card { background: rgba(12,175,123,0.06); border-left: 3px solid var(--accent); }
-.draft-tag { font-size: 10px; font-weight: 700; padding: 2px 5px; border-radius: 3px; background: var(--accent); color: #fff; line-height: 1; flex-shrink: 0; }
 
 /* ===== Status ===== */
 .p-status {
@@ -565,7 +600,7 @@ body::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 4px; }
       <img src="malo-tcg-logo.png" alt="MALO-TCG" class="p-logo">
       <span class="p-logo-text">战绩追踪</span>
     </div>
-    <button class="p-btn-refresh" onclick="requestRefresh()" title="刷新数据">🔄</button>
+    <button class="p-btn-refresh" onclick="requestRefresh()" title="刷新排位数据（只读，不会改对局记录）">🔄</button>
   </div>
 
   <!-- Stats -->
@@ -608,6 +643,22 @@ body::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 4px; }
     <span class="deck-icon">🃏</span>
     <select id="deckSel" class="deck-select"></select>
     <span class="deck-arrow">▾</span>
+  </div>
+
+  <!-- 快速记录：打完一局点一下「胜」或「负」 -->
+  <div class="glass-panel quick-record">
+    <div class="qr-row">
+      <span class="hist-turn">
+        <button class="hist-btn-turn" id="qrTurnFirst" onclick="popSetTurn('first')" title="先手（再点一次取消）">先</button>
+        <button class="hist-btn-turn second" id="qrTurnSecond" onclick="popSetTurn('second')" title="后手（再点一次取消）">后</button>
+      </span>
+      <select class="hist-opp-select qr-opp" id="qrOpp" onchange="popSetOpp(this.value)" title="对手卡组，可留空"></select>
+    </div>
+    <div class="qr-row">
+      <button class="qr-btn win" onclick="popRecordMatch('win')">胜</button>
+      <button class="qr-btn loss" onclick="popRecordMatch('loss')">负</button>
+    </div>
+    <span class="qr-hint" id="qrHint"></span>
   </div>
 
   <!-- API -->
@@ -675,6 +726,42 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 function pad(n) { return n < 10 ? '0' + n : '' + n; }
 function byId(id) { return document.getElementById(id); }
 
+// ===== 对局记录口径：卡组战绩 = 该卡组所有记录的胜负合计（记录是唯一事实来源） =====
+function popUuid() { return 'xxxx-xxxx-xxxx'.replace(/x/g, function(){ return (Math.random()*16|0).toString(16); }); }
+function popEntryWins(e) {
+  if (!e) return 0;
+  if (e.deltaWins) return e.deltaWins;
+  return (e.result === 'win' || e.result === '胜') ? 1 : 0;
+}
+function popEntryLosses(e) {
+  if (!e) return 0;
+  if (e.deltaLosses) return e.deltaLosses;
+  return (e.result === 'loss' || e.result === '负') ? 1 : 0;
+}
+function popResultOf(e) {
+  var w = popEntryWins(e), l = popEntryLosses(e);
+  if (w > 0 && w >= l) return 'win';
+  if (l > 0 && l >= w) return 'loss';
+  return null;
+}
+function popTotalsFor(p, deckId) {
+  var t = { wins: 0, losses: 0, total: 0 };
+  ((p && p.matchHistory) || []).forEach(function(e) {
+    if (!e || e.deckId !== deckId) return;
+    t.wins += popEntryWins(e);
+    t.losses += popEntryLosses(e);
+  });
+  t.total = t.wins + t.losses;
+  return t;
+}
+// 记录卡表单（沿用 draftMatch 字段，和网页端共用同一份）
+function popForm(p) {
+  if (!p.draftMatch || typeof p.draftMatch !== 'object') p.draftMatch = { deckId: null, firstMove: null, opponentDeck: '' };
+  if (p.draftMatch.firstMove === undefined) p.draftMatch.firstMove = null;
+  if (p.draftMatch.opponentDeck === undefined) p.draftMatch.opponentDeck = '';
+  return p.draftMatch;
+}
+
 function render() {
   // 如果正在编辑对手，不要重新加载 localStorage，避免丢失临时编辑状态
   var editing = data && data.personal && data.personal.matchHistory && data.personal.matchHistory.some(function(h){ return h._editingOpp; });
@@ -701,22 +788,15 @@ function render() {
   }).join('');
   sel.value = curId || '';
 
-  var cur = decks[curId];
-  var accW = cur ? (cur.accumulatedWins || 0) : 0;
-  var accL = cur ? (cur.accumulatedLosses || 0) : 0;
-  var apiW = (p && p.lastApiWins !== undefined) ? p.lastApiWins : (cur ? (cur.snapshotWins || 0) : 0);
-  var apiL = (p && p.lastApiLosses !== undefined) ? p.lastApiLosses : (cur ? (cur.snapshotLosses || 0) : 0);
-  var snapW = cur ? (cur.snapshotWins || 0) : 0;
-  var snapL = cur ? (cur.snapshotLosses || 0) : 0;
-  var curW = accW + Math.max(0, apiW - snapW);
-  var curL = accL + Math.max(0, apiL - snapL);
-  var total = curW + curL;
-  var wr = total > 0 ? (curW / total * 100) : 0;
+  // 战绩 = 这个卡组的对局记录合计
+  var t = popTotalsFor(p, curId);
+  var total = t.total;
+  var wr = total > 0 ? (t.wins / total * 100) : 0;
 
   byId('gFill').setAttribute('stroke-dashoffset', CIRCUMFERENCE * (1 - wr / 100));
   byId('gPct').textContent = total > 0 ? wr.toFixed(1) + '%' : '--';
-  byId('deckWins').textContent = curW;
-  byId('deckLosses').textContent = curL;
+  byId('deckWins').textContent = t.wins;
+  byId('deckLosses').textContent = t.losses;
   byId('deckTotal').textContent = '合计 ' + total + ' 场';
 
   var pd = data && data.players && data.players[p.playerName];
@@ -728,7 +808,31 @@ function render() {
   } else { byId('apiMini').style.display = 'none'; }
 
   renderHistory();
+  renderQuickRecord(p);
   renderStatus();
+}
+
+// 快速记录面板：先后手 / 对手 / 记到哪个卡组
+function renderQuickRecord(p) {
+  var form = popForm(p);
+  var deckId = (form.deckId && p.decks && p.decks[form.deckId]) ? form.deckId : p.currentDeckId;
+  var deck = (p.decks || {})[deckId] || null;
+
+  byId('qrTurnFirst').className = 'hist-btn-turn' + (form.firstMove === 'first' ? ' active' : '');
+  byId('qrTurnSecond').className = 'hist-btn-turn second' + (form.firstMove === 'second' ? ' active second' : '');
+
+  var opp = form.opponentDeck || '';
+  var sel = byId('qrOpp');
+  sel.innerHTML = '<option value="">' + (opp ? '-- 清空对手 --' : '+ 对手卡组') + '</option>' +
+    ((p.deckList || []).map(function(dl) {
+      return '<option value="' + esc(dl.name) + '"' + (dl.name === opp ? ' selected' : '') + '>' + esc(dl.name) + '</option>';
+    }).join(''));
+  sel.value = opp;
+
+  var t2 = deck ? popTotalsFor(p, deckId) : { wins: 0, losses: 0 };
+  byId('qrHint').textContent = deck
+    ? ('记到 ' + deck.name + ' · 现 ' + t2.wins + '胜 ' + t2.losses + '败')
+    : '还没有卡组，先在网页端创建一个';
 }
 
 function renderPopDeckIcons(ids) {
@@ -743,19 +847,15 @@ function renderHistory() {
   var deckList = (data && data.personal && data.personal.deckList) ? data.personal.deckList : [];
   var c = byId('historyList');
 
-  // 预输入草案默认始终存在
-  popEnsureDraft();
-  var draft = (data && data.personal) ? data.personal.draftMatch : null;
-  var draftHtml = renderPopDraftCard(draft, deckList);
-
-  if (h.length === 0 && !draft) { c.innerHTML = '<div class="hist-empty">暂无记录 · 获取战绩后自动生成</div>'; return; }
+  if (h.length === 0) { c.innerHTML = '<div class="hist-empty">暂无记录 · 在上方点「胜」或「负」记一场</div>'; return; }
   var items = h.slice(-10).reverse();
-  c.innerHTML = draftHtml + items.map(function(x) {
+  c.innerHTML = items.map(function(x) {
     var d = x.time ? new Date(x.time) : new Date();
     var ts = (d.getMonth()+1)+'/'+d.getDate()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
-    var dw = x.deltaWins || 0, dl = x.deltaLosses || 0, has = dw>0||dl>0;
-    var dc = has ? (dw>dl?'win':'lose') : 'neutral';
-    var delta = has ? (dw>dl ? '<span class="dw">胜</span>' : '<span class="dl">负</span>') : '<span style="color:var(--text-3)">切换</span>';
+    var res = popResultOf(x);
+    var dc = res === 'win' ? 'win' : (res === 'loss' ? 'lose' : 'neutral');
+    var delta = res === 'win' ? '<span class="dw">胜</span>'
+      : (res === 'loss' ? '<span class="dl">负</span>' : '<span style="color:var(--text-3)">未知</span>');
     var opp = x.opponentDeck || '';
     var deckEntry = opp ? deckList.find(function(dl){ return dl.name===opp; }) : null;
     var oppIcons = deckEntry && deckEntry.icons ? renderPopDeckIcons(deckEntry.icons) : '';
@@ -766,17 +866,21 @@ function renderHistory() {
         var sel = dl.name===opp ? ' selected' : '';
         return '<option value="'+esc(dl.name)+'"'+sel+'>'+esc(dl.name)+'</option>';
       }).join('');
-      oppHtml = '<div class="hist-right-row"><select class="hist-opp-select" data-id="'+esc(x.id)+'"><option value="">--</option>'+opts+'</select>'+
-        '<button class="hist-btn-mini cancel" data-cancel="'+esc(x.id)+'" title="取消">✕</button></div>';
+      oppHtml = '<div class="hist-right-row">'+
+        '<button class="hist-btn-mini'+(res==='win'?' on':'')+'" data-res-id="'+esc(x.id)+'" data-res="win" title="改成胜">胜</button>'+
+        '<button class="hist-btn-mini'+(res==='loss'?' on':'')+'" data-res-id="'+esc(x.id)+'" data-res="loss" title="改成负">负</button>'+
+        '<select class="hist-opp-select" data-id="'+esc(x.id)+'"><option value="">--</option>'+opts+'</select>'+
+        '<button class="hist-btn-mini cancel" data-cancel="'+esc(x.id)+'" title="取消">✕</button>'+
+        '<button class="hist-btn-mini cancel" data-del="'+esc(x.id)+'" title="删除这条记录">🗑</button></div>';
     } else if (opp) {
-      oppHtml = '<span class="hist-opp" data-id="'+esc(x.id)+'" title="点击修改">'+oppIcons+' vs '+esc(opp)+'</span>';
+      oppHtml = '<span class="hist-opp" data-id="'+esc(x.id)+'" title="点击修改对手/胜负">'+oppIcons+' vs '+esc(opp)+'</span>';
     } else {
-      oppHtml = '<span class="hist-opp-placeholder" data-id="'+esc(x.id)+'">+ 对手</span>';
+      oppHtml = '<span class="hist-opp-placeholder" data-id="'+esc(x.id)+'" title="点击修改对手/胜负">+ 对手</span>';
     }
 
     var turnHtml = renderPopTurn(x.id, x.firstMove);
 
-    return '<div class="hist-item"><div class="hist-left"><span class="hist-deck-dot '+dc+'"></span><span class="hist-deck-name" title="'+esc(x.deckName||'')+'">'+esc(x.deckName||'')+'</span><span class="hist-turn">'+turnHtml+'</span><span class="hist-delta">'+delta+'</span>'+oppHtml+'</div><span class="hist-time">'+ts+'</span></div>';
+    return '<div class="hist-item"><div class="hist-left"><span class="hist-deck-dot '+dc+'"></span><span class="hist-deck-name" title="'+esc(x.deckName||'')+'">'+esc(x.deckName||'')+'</span><span class="hist-turn">'+turnHtml+'</span><span class="hist-delta" data-opp-id="'+esc(x.id)+'" title="点击修改">'+delta+'</span>'+oppHtml+'</div><span class="hist-time">'+ts+'</span></div>';
   }).join('');
 }
 
@@ -844,61 +948,70 @@ function savePopOpp(id, val) {
 }
 
 // ============================================================
-// 预输入草案（悬浮窗版）
+// 快速记录（悬浮窗版）
 // ============================================================
 
-function popEnsureDraft() {
-  if (!data || !data.personal) return;
-  if (!data.personal.draftMatch) {
-    commitData(function(fresh) {
-      if (!fresh.personal.draftMatch) fresh.personal.draftMatch = { firstMove: null, opponentDeck: '' };
-    });
-  }
-}
-
-function popSaveDraftTurn(turn) {
+function popSetTurn(turn) {
   commitData(function(fresh) {
-    if (!fresh.personal.draftMatch) fresh.personal.draftMatch = { firstMove: null, opponentDeck: '' };
-    fresh.personal.draftMatch.firstMove = turn;
+    var f = popForm(fresh.personal);
+    f.firstMove = f.firstMove === turn ? null : turn; // 再点一次＝取消
   });
 }
 
-function popSaveDraftOpp() {
-  var sel = document.querySelector('.draft-opp-select');
-  if (!sel) return;
-  var val = sel.value;
+function popSetOpp(val) {
+  commitData(function(fresh) { popForm(fresh.personal).opponentDeck = val || ''; });
+}
+
+function popSetResult(id, result) {
   commitData(function(fresh) {
-    if (!fresh.personal.draftMatch) fresh.personal.draftMatch = { firstMove: null, opponentDeck: '' };
-    fresh.personal.draftMatch.opponentDeck = val;
+    var entry = (fresh.personal.matchHistory || []).find(function(h){ return h.id === id; });
+    if (!entry || popResultOf(entry) === result) return;
+    entry.deltaWins = result === 'win' ? 1 : 0;
+    entry.deltaLosses = result === 'loss' ? 1 : 0;
+    entry.result = result;
   });
 }
 
-function popClearDraft() {
+function popDeleteEntry(id) {
+  if (!confirm('删除这条记录吗？')) return;
   commitData(function(fresh) {
-    fresh.personal.draftMatch = { firstMove: null, opponentDeck: '' };
+    var p = fresh.personal;
+    p.matchHistory = (p.matchHistory || []).filter(function(h){ return h.id !== id; });
+    // 墓碑：另一个还开着的窗口用旧快照保存时不会把这条带回来
+    if (!p.historyTombstones) p.historyTombstones = {};
+    p.historyTombstones[id] = Date.now();
   });
 }
 
-function renderPopDraftCard(draft, deckList) {
-  var firstMove = draft.firstMove;
-  var opp = draft.opponentDeck || '';
-  var opts = deckList.map(function(dl){
-    var sel = dl.name===opp ? ' selected' : '';
-    return '<option value="'+esc(dl.name)+'"'+sel+'>'+esc(dl.name)+'</option>';
-  }).join('');
-
-  var turnLeft = firstMove==='first'
-    ? '<button class="hist-btn-turn active" onclick="popSaveDraftTurn(\'first\')">先</button>'
-    : '<button class="hist-btn-turn" onclick="popSaveDraftTurn(\'first\')">先</button>';
-  var turnRight = firstMove==='second'
-    ? '<button class="hist-btn-turn active second" onclick="popSaveDraftTurn(\'second\')">后</button>'
-    : '<button class="hist-btn-turn second" onclick="popSaveDraftTurn(\'second\')">后</button>';
-
-  return '<div class="hist-item draft-card">'+
-    '<div class="hist-left"><span class="draft-tag" title="预输入">预</span><span class="hist-turn">'+turnLeft+turnRight+'</span>'+
-    '<select class="hist-opp-select draft-opp-select" onchange="popSaveDraftOpp()"><option value="">'+(opp?'-- 未设置 --':'+ 对手卡组')+'</option>'+opts+'</select></div>'+
-    '<button class="hist-btn-mini cancel" onclick="popClearDraft()" title="清除">✕</button>'+
-    '</div>';
+// 打完一局点一下「胜」/「负」：记到当前卡组，带上选好的先后手和对手
+function popRecordMatch(result) {
+  var recorded = '';
+  commitData(function(fresh) {
+    var p = fresh.personal;
+    var deckId = p.currentDeckId;
+    var deck = deckId ? (p.decks || {})[deckId] : null;
+    if (!deck) return;
+    var f = popForm(p);
+    var entry = {
+      id: popUuid(),
+      deckId: deckId,
+      deckName: deck.name,
+      deltaWins: result === 'win' ? 1 : 0,
+      deltaLosses: result === 'loss' ? 1 : 0,
+      result: result,
+      manual: true,
+      time: new Date().toISOString(),
+    };
+    if (f.firstMove) entry.firstMove = f.firstMove;
+    if (f.opponentDeck) entry.opponentDeck = f.opponentDeck;
+    if (!p.matchHistory) p.matchHistory = [];
+    p.matchHistory.push(entry);
+    f.opponentDeck = ''; // 对手每局都不同，记完清掉；先后手保留
+    recorded = deck.name + ' ' + (result === 'win' ? '胜' : '负');
+  });
+  var hint = byId('qrHint');
+  if (hint && recorded) hint.textContent = '✓ 已记录 ' + recorded;
+  else if (hint && !recorded) hint.textContent = '还没有卡组，先在网页端创建一个';
 }
 
 function renderStatus() {
@@ -919,14 +1032,8 @@ byId('deckSel').addEventListener('change', function() {
   commitData(function(fresh) {
     var p = fresh.personal || {};
     if (nid === p.currentDeckId) return;
-    var old = p.decks[p.currentDeckId];
-    if (old && p.lastApiWins !== undefined) {
-      var dw = p.lastApiWins - (old.snapshotWins||0), dl = p.lastApiLosses - (old.snapshotLosses||0);
-      if (dw>0||dl>0) { old.accumulatedWins=(old.accumulatedWins||0)+Math.max(0,dw); old.accumulatedLosses=(old.accumulatedLosses||0)+Math.max(0,dl); }
-    }
     p.currentDeckId = nid;
-    var nd = p.decks[nid];
-    if (nd) { nd.snapshotWins = p.lastApiWins||0; nd.snapshotLosses = p.lastApiLosses||0; }
+    popForm(p).deckId = nid; // 记录卡跟着切，避免记到别的卡组上
   });
   channel.postMessage({ type: 'deck-changed', deckId: nid });
 });
@@ -960,9 +1067,21 @@ window.addEventListener('storage', function(e) { if (e.key===TK) applyTheme(e.ne
 // 对局历史事件委托：点击对手进入编辑，选择下拉框自动保存，点击取消退出，点击先后手编辑/保存
 byId('historyList').addEventListener('click', function(e) {
   var target = e.target;
-  var oppEl = target.closest('.hist-opp, .hist-opp-placeholder');
+  var resEl = target.closest('[data-res]');
+  if (resEl) {
+    e.stopPropagation();
+    popSetResult(resEl.getAttribute('data-res-id'), resEl.getAttribute('data-res'));
+    return;
+  }
+  var delEl = target.closest('[data-del]');
+  if (delEl) {
+    e.stopPropagation();
+    popDeleteEntry(delEl.getAttribute('data-del'));
+    return;
+  }
+  var oppEl = target.closest('.hist-opp, .hist-opp-placeholder, .hist-delta[data-opp-id]');
   if (oppEl) {
-    var id = oppEl.getAttribute('data-id');
+    var id = oppEl.getAttribute('data-id') || oppEl.getAttribute('data-opp-id');
     if (id) { e.stopPropagation(); editPopOpp(id); }
     return;
   }

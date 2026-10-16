@@ -86,7 +86,7 @@
     <section class="personal-section" id="personalSection">
       <div class="personal-card">
         <h2 class="section-title">🃏 个人战绩</h2>
-        <p class="section-desc">设置你的游戏昵称，创建卡组，系统自动从小天冠山 API 获取战绩并按卡组时间段分配</p>
+        <p class="section-desc">设置你的游戏昵称、创建卡组；每打完一局，在「对局历史」顶部点一下「胜」或「负」就记一场。战绩、胜率、对阵分析全部由你记的这部分数据算出来</p>
 
         <!-- 第一步：设置玩家昵称 -->
         <div class="personal-setup">
@@ -98,7 +98,7 @@
           <div id="personalSetupMsg" class="add-result"></div>
         </div>
 
-        <!-- API 总体数据 -->
+        <!-- API 总体数据（只读参考：不再据此自动记账） -->
         <div id="personalApiOverview" class="personal-api-overview">
           <div class="api-stat"><span class="api-stat-label">排名</span><span class="api-stat-value" id="apiRank">--</span></div>
           <div class="api-stat"><span class="api-stat-label">积分</span><span class="api-stat-value" id="apiExp">--</span></div>
@@ -106,7 +106,7 @@
           <div class="api-stat"><span class="api-stat-label">总败场</span><span class="api-stat-value lose" id="apiTotalLose">--</span></div>
           <div class="api-stat"><span class="api-stat-label">总胜率</span><span class="api-stat-value" id="apiWinRate">--</span></div>
           <div class="api-stat"><span class="api-stat-label">总场数</span><span class="api-stat-value" id="apiTotalGames">--</span></div>
-          <button id="personalRefreshApiBtn" class="btn btn-sm btn-ghost" title="立刻同步一次 API 数据">🔄 刷新</button>
+          <button id="personalRefreshApiBtn" class="btn btn-sm btn-ghost" title="从排位 API 拉一次当前数据（只读，不会写进对局历史）">🔄 刷新排位数据</button>
           <span id="personalAutoStatus" class="personal-auto-status"></span>
         </div>
       </div>
@@ -164,10 +164,10 @@
             </div>
           </div>
 
-          <!-- 获取数据按钮 -->
+          <!-- 手动记录入口 -->
           <div class="deck-record-row">
-            <button id="personalFetchBtn" class="btn btn-fetch-data">🔄 获取战绩（API差分）</button>
-            <span class="deck-record-hint">页面打开时会每 60 秒自动同步一次，打完一局稍等就会记上；也可点按钮立刻获取</span>
+            <button id="goRecordBtn" class="btn btn-fetch-data">✍️ 记一局对局</button>
+            <span class="deck-record-hint">在下方「对局历史」顶部选好卡组、对手和先后手，点「胜」或「负」即可记一场。记录只增不减，不会被自动同步改掉</span>
           </div>
         </div>
 
@@ -198,11 +198,12 @@
               <button id="clearHistoryBtn" class="btn btn-sm btn-ghost">清空历史</button>
             </div>
           </div>
+          <div class="history-note">记录只保存在这台浏览器的本地数据里：换设备、换浏览器或清浏览器数据都会看不到，请定期点「导出全部数据」留一份备份。</div>
           <div id="historyList" class="history-list"></div>
           <div id="historyEmpty" class="empty-state" style="padding:30px;">
             <div class="empty-icon">📝</div>
             <p class="empty-text">暂无对局记录</p>
-            <p class="empty-hint">选中卡组后点击"获取战绩"，差分数据将自动记录</p>
+            <p class="empty-hint">在上方记录卡里点「胜」或「负」就能记一场</p>
           </div>
         </div>
       </div>
@@ -381,7 +382,7 @@
       </div>
       <p class="paste-modal-hint">
         浏览器无法直接访问小天冠山 API（跨域限制），必须经过「中转」取数据。
-        获取战绩时会同时并发尝试几个中转，谁先返回可用数据就用谁。
+        刷新排位数据时会同时并发尝试几个中转，谁先返回可用数据就用谁。
         公共中转可能随时失效，可在此检测可用性，或填入你自己部署的中转地址（见
         <a href="RELAY.md" target="_blank" rel="noopener">RELAY.md</a>，五分钟可搞定）。
       </p>
