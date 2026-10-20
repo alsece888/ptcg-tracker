@@ -175,7 +175,8 @@ test('profile sync keeps decks, watchlist, atlas and propagates removals', async
       currentDeckId: 'deck1', currentDeckAt: 10,
       watchlist: ['rival'], watchlistStamps: { rival: 10 }, watchlistTombstones: {},
       decks: { deck1: { name: '我的卡组', updatedAt: 10 } }, deckTombstones: {},
-      deckList: [{ id: 'atlas1', name: '对手卡组', icons: ['pikachu'], updatedAt: 10 }],
+      deckList: [{ id: 'atlas1', name: '对手卡组', icons: ['pikachu'], updatedAt: 10 },
+        { id: 'atlas-copy', name: '对手卡组', icons: [], updatedAt: 5 }],
       deckListTombstones: {} };
     const first = await api('POST', '/api/profile', { profile }, token);
     assert.equal(first.status, 200, JSON.stringify(first.body));
@@ -183,6 +184,7 @@ test('profile sync keeps decks, watchlist, atlas and propagates removals', async
     assert.deepEqual(read.body.profile.watchlist, ['rival']);
     assert.equal(read.body.profile.decks.deck1.name, '我的卡组');
     assert.equal(read.body.profile.deckList[0].name, '对手卡组');
+    assert.equal(read.body.profile.deckList.length, 1);
     assert.equal(read.body.records.length, 0);
     const removal = { ...profile, playerName: '', playerNameAt: 30,
       watchlist: [], watchlistTombstones: { rival: 20 },

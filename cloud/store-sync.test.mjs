@@ -54,7 +54,8 @@ test('cloud profile restores collections and keeps newer local edits', () => {
   try {
     values.set(store.KEY, JSON.stringify({ watchlist: ['local'], personal: {
       playerName: 'Alice', playerNameAt: 10, decks: { own: { name: '本机卡组', updatedAt: 20 } },
-      deckList: [{ id: 'atlas', name: '旧图鉴', updatedAt: 5 }],
+      deckList: [{ id: 'atlas', name: '旧图鉴', updatedAt: 5 },
+        { id: 'legacy-copy', name: '新图鉴', updatedAt: 4 }],
       watchlistStamps: { local: 20 }, matchHistory: [],
     } }));
     const remote = { version: 1, playerName: 'Alice', playerNameAt: 10,
@@ -68,6 +69,7 @@ test('cloud profile restores collections and keeps newer local edits', () => {
     assert.equal(merged.personal.decks.own.name, '本机卡组');
     assert.equal(merged.personal.decks.other.name, '云端卡组');
     assert.equal(merged.personal.deckList[0].name, '新图鉴');
+    assert.equal(merged.personal.deckList.filter((item) => item.name === '新图鉴').length, 1);
     assert.equal(merged.personal.currentDeckId, 'own');
     assert.deepEqual(store.cloudProfile(merged).watchlist, ['remote']);
   } finally { globalThis.localStorage = previousStorage; }

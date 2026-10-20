@@ -169,10 +169,24 @@
     }
     put(baseArr);
     put(incArr);
-    return order.map(function (id) { return map[id]; }).filter(function (d) {
+    var visible = order.map(function (id) { return map[id]; }).filter(function (d) {
       var t = tombstones && tombstones[d.id];
       return !(t && t >= stampOf(d));
     });
+    var byName = {};
+    visible.forEach(function (d) {
+      var key = String(d.name || d.id).trim().toLowerCase();
+      var old = byName[key];
+      if (!old) { byName[key] = d; return; }
+      var preferNew = stampOf(d) > stampOf(old) ||
+        (stampOf(d) === stampOf(old) && String(d.id) < String(old.id));
+      var loser = preferNew ? old : d;
+      var winner = preferNew ? d : old;
+      tombstones[loser.id] = Math.max(Number(tombstones[loser.id]) || 0,
+        stampOf(winner), stampOf(loser), 1);
+      if (preferNew) byName[key] = d;
+    });
+    return Object.keys(byName).sort().map(function (key) { return byName[key]; });
   }
 
   function mergeHistory(baseArr, incArr, personal) {

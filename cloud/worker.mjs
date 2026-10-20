@@ -289,7 +289,8 @@ function mergeStampMap(a, b) {
 }
 
 function mergeProfile(oldValue, newValue) {
-  if (!oldValue) return newValue;
+  const firstProfile = !oldValue;
+  if (!oldValue) oldValue = { version: 1, watchlist: [], decks: {}, deckList: [] };
   const old = profileObject(oldValue);
   const next = profileObject(newValue);
   const merged = { version: 1,
@@ -315,12 +316,26 @@ function mergeProfile(oldValue, newValue) {
   [...old.deckList, ...next.deckList].forEach((item) => {
     if (item?.id && (!atlas.has(item.id) || Number(item.updatedAt || 0) > Number(atlas.get(item.id).updatedAt || 0))) atlas.set(item.id, item);
   });
-  merged.deckList = [...atlas.values()].filter((item) =>
-    !merged.deckListTombstones[item.id] || merged.deckListTombstones[item.id] < Number(item.updatedAt || 0));
-  const nameWinner = (next.playerNameAt || 0) > (old.playerNameAt || 0) ? next : old;
+  const byName = new Map();
+  [...atlas.values()].filter((item) =>
+    !merged.deckListTombstones[item.id] || merged.deckListTombstones[item.id] < Number(item.updatedAt || 0))
+    .forEach((item) => {
+      const key = String(item.name || item.id).trim().toLowerCase();
+      const oldItem = byName.get(key);
+      if (!oldItem) { byName.set(key, item); return; }
+      const preferNew = Number(item.updatedAt || 0) > Number(oldItem.updatedAt || 0) ||
+        (Number(item.updatedAt || 0) === Number(oldItem.updatedAt || 0) && String(item.id) < String(oldItem.id));
+      const loser = preferNew ? oldItem : item;
+      const winner = preferNew ? item : oldItem;
+      merged.deckListTombstones[loser.id] = Math.max(Number(merged.deckListTombstones[loser.id]) || 0,
+        Number(winner.updatedAt || 0), Number(loser.updatedAt || 0), 1);
+      if (preferNew) byName.set(key, item);
+    });
+  merged.deckList = [...byName.keys()].sort().map((key) => byName.get(key));
+  const nameWinner = firstProfile || (next.playerNameAt || 0) > (old.playerNameAt || 0) ? next : old;
   merged.playerName = typeof nameWinner.playerName === 'string' ? nameWinner.playerName : (old.playerName || next.playerName || '');
   merged.playerNameAt = Math.max(old.playerNameAt || 0, next.playerNameAt || 0);
-  const deckWinner = (next.currentDeckAt || 0) > (old.currentDeckAt || 0) ? next : old;
+  const deckWinner = firstProfile || (next.currentDeckAt || 0) > (old.currentDeckAt || 0) ? next : old;
   merged.currentDeckId = deckWinner.currentDeckId || null;
   merged.currentDeckAt = Math.max(old.currentDeckAt || 0, next.currentDeckAt || 0);
   return profileObject(merged);
