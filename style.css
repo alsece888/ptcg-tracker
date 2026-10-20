@@ -59,6 +59,16 @@ body {
   line-height: 1.6;
 }
 
+.cloud-module { margin-top: 20px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-input); }
+.cloud-module h3 { font-size: 16px; margin-bottom: 6px; }
+.cloud-module p { color: var(--text-dim); font-size: 13px; margin-bottom: 12px; }
+.cloud-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cloud-controls input { flex: 1 1 220px; min-width: 0; }
+.cloud-controls button { white-space: nowrap; }
+.cloud-record-actions { margin-top: 8px; }
+.cloud-status { min-height: 22px; margin-top: 8px; color: var(--text-dim); font-size: 13px; }
+.cloud-status.cloud-error { color: var(--danger); }
+
 .app {
   max-width: 1100px;
   margin: 0 auto;

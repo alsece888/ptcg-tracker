@@ -1,0 +1,20 @@
+{
+  "name": "PTCG 胜负记录",
+  "description": "普通行对应一条用户对局记录；每个用户另有一条账号行，保存密码盐和密码校验值，不保存明文密码。",
+  "fields": [
+    { "name": "记录ID", "type": "singleLineText", "unique": true, "notNull": true },
+    { "name": "用户ID", "type": "singleLineText", "notNull": true },
+    { "name": "对局时间", "type": "date" },
+    { "name": "玩家昵称", "type": "singleLineText" },
+    { "name": "我的卡组ID", "type": "singleLineText" },
+    { "name": "我的卡组", "type": "singleLineText" },
+    { "name": "胜负", "type": "singleLineText" },
+    { "name": "先后手", "type": "singleLineText" },
+    { "name": "对手卡组", "type": "singleLineText" },
+    { "name": "胜场数", "type": "number" },
+    { "name": "负场数", "type": "number" },
+    { "name": "最后修改时间", "type": "date" },
+    { "name": "密码盐", "type": "singleLineText" },
+    { "name": "密码校验值", "type": "singleLineText" }
+  ]
+}

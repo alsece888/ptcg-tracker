@@ -98,6 +98,24 @@
           <div id="personalSetupMsg" class="add-result"></div>
         </div>
 
+        <div class="cloud-module">
+          <h3>☁️ 云端战绩</h3>
+          <p>设置用户 ID 和密码后，可上传这台浏览器的对局记录；换电脑时用同一 ID 和密码登录，再读取云端记录。密码不会保存在网页或 Teable 明文中。忘记密码目前无法找回，请妥善保存。</p>
+          <div class="cloud-controls">
+            <input type="text" id="cloudUserIdInput" class="setup-input" placeholder="用户 ID（3–32 位字母、数字、_ 或 -）" maxlength="32" autocomplete="off" spellcheck="false">
+            <input type="password" id="cloudPasswordInput" class="setup-input" placeholder="密码（至少 10 位）" minlength="10" maxlength="128" autocomplete="new-password">
+            <input type="password" id="cloudPasswordConfirmInput" class="setup-input" placeholder="注册时再次输入密码" minlength="10" maxlength="128" autocomplete="new-password">
+            <button id="cloudRegisterBtn" class="btn btn-ghost" type="button">注册 ID</button>
+            <button id="cloudLoginBtn" class="btn btn-ghost" type="button">登录</button>
+            <button id="cloudLogoutBtn" class="btn btn-ghost" type="button" style="display:none">退出登录</button>
+          </div>
+          <div class="cloud-controls cloud-record-actions">
+            <button id="cloudUploadBtn" class="btn btn-add" type="button">上传本机记录</button>
+            <button id="cloudRestoreBtn" class="btn btn-ghost" type="button">读取云端记录</button>
+          </div>
+          <div id="cloudStatus" class="cloud-status" role="status" aria-live="polite"></div>
+        </div>
+
         <!-- API 总体数据（只读参考：不再据此自动记账） -->
         <div id="personalApiOverview" class="personal-api-overview">
           <div class="api-stat"><span class="api-stat-label">排名</span><span class="api-stat-value" id="apiRank">--</span></div>
@@ -198,7 +216,7 @@
               <button id="clearHistoryBtn" class="btn btn-sm btn-ghost">清空历史</button>
             </div>
           </div>
-          <div class="history-note">记录只保存在这台浏览器的本地数据里：换设备、换浏览器或清浏览器数据都会看不到，请定期点「导出全部数据」留一份备份。</div>
+          <div class="history-note">记录默认保存在这台浏览器。登录上方的云端战绩模块后，可手动上传或读取；请定期点「导出全部数据」留一份备份。</div>
           <div id="historyList" class="history-list"></div>
           <div id="historyEmpty" class="empty-state" style="padding:30px;">
             <div class="empty-icon">📝</div>
@@ -398,5 +416,7 @@
 
   <script src="store.js?v=1"></script>
   <script src="app.js?v=19"></script>
+  <script src="cloud-config.js?v=1"></script>
+  <script src="cloud.js?v=2"></script>
 </body>
 </html>
