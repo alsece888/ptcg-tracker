@@ -55,6 +55,9 @@
     (p.matchHistory || []).forEach(function (e) { max = Math.max(max, stampOf(e)); });
     Object.keys(p.decks || {}).forEach(function (k) { max = Math.max(max, stampOf(p.decks[k])); });
     (p.deckList || []).forEach(function (d) { max = Math.max(max, stampOf(d)); });
+    Object.values(p.watchlistStamps || {}).forEach(function (n) { max = Math.max(max, Number(n) || 0); });
+    Object.values(p.watchlistTombstones || {}).forEach(function (n) { max = Math.max(max, Number(n) || 0); });
+    max = Math.max(max, p.playerNameAt || 0);
     ['apiSnapAt', 'draftAt', 'currentDeckAt'].forEach(function (k) {
       if (typeof p[k] === 'number') max = Math.max(max, p[k]);
     });
@@ -78,6 +81,9 @@
     if (!p.historyTombstones || typeof p.historyTombstones !== 'object') p.historyTombstones = {};
     if (!p.deckTombstones || typeof p.deckTombstones !== 'object') p.deckTombstones = {};
     if (!p.deckListTombstones || typeof p.deckListTombstones !== 'object') p.deckListTombstones = {};
+    if (!p.watchlistStamps || typeof p.watchlistStamps !== 'object') p.watchlistStamps = {};
+    if (!p.watchlistTombstones || typeof p.watchlistTombstones !== 'object') p.watchlistTombstones = {};
+    if (typeof p.playerNameAt !== 'number') p.playerNameAt = 0;
     if (typeof p.historyClearedAt !== 'number') p.historyClearedAt = 0;
 
     // 老数据没有 updatedAt：用记录自带的时间兜底
@@ -192,6 +198,18 @@
     return out;
   }
 
+  function mergeWatchlist(base, incoming, personal) {
+    var names = {};
+    (base || []).concat(incoming || []).forEach(function (name) {
+      if (typeof name === 'string' && name.trim()) names[name.toLowerCase()] = name;
+    });
+    return Object.keys(names).filter(function (key) {
+      var stamp = Number(personal.watchlistStamps[key]) || 0;
+      var deleted = Number(personal.watchlistTombstones[key]) || 0;
+      return !deleted || stamp > deleted;
+    }).map(function (key) { return names[key]; });
+  }
+
   function merge(base, inc, opts) {
     opts = opts || {};
     var out = normalize(deepCopy(base) || {});
@@ -205,9 +223,6 @@
       out.notes = incoming.notes;
     } else {
       // 悬浮窗这类「只改局部」的写入：不动关注列表/玩家数据，只补缺失的键
-      var names = {};
-      out.watchlist.forEach(function (w) { names[w] = true; });
-      incoming.watchlist.forEach(function (w) { if (!names[w]) { names[w] = true; out.watchlist.push(w); } });
       Object.keys(incoming.players).forEach(function (k) { if (!(k in out.players)) out.players[k] = incoming.players[k]; });
       Object.keys(incoming.notes).forEach(function (k) { if (!(k in out.notes)) out.notes[k] = incoming.notes[k]; });
     }
@@ -217,12 +232,21 @@
     bp.historyTombstones = mergeTombstones(bp.historyTombstones, ip.historyTombstones);
     bp.deckTombstones = mergeTombstones(bp.deckTombstones, ip.deckTombstones);
     bp.deckListTombstones = mergeTombstones(bp.deckListTombstones, ip.deckListTombstones);
+    bp.watchlistStamps = mergeTombstones(bp.watchlistStamps, ip.watchlistStamps);
+    bp.watchlistTombstones = mergeTombstones(bp.watchlistTombstones, ip.watchlistTombstones);
+    out.watchlist = mergeWatchlist(out.watchlist, incoming.watchlist, bp);
     bp.historyClearedAt = Math.max(bp.historyClearedAt || 0, ip.historyClearedAt || 0);
     bp.decks = mergeDecks(bp.decks, ip.decks, bp.deckTombstones);
     bp.deckList = mergeIdList(bp.deckList, ip.deckList, bp.deckListTombstones);
     bp.matchHistory = mergeHistory(bp.matchHistory, ip.matchHistory, bp);
 
-    bp.playerName = ip.playerName || bp.playerName;
+    if ((ip.playerNameAt || 0) > (bp.playerNameAt || 0)) {
+      bp.playerName = ip.playerName;
+      bp.playerNameAt = ip.playerNameAt;
+    } else if (!bp.playerName && ip.playerName) {
+      bp.playerName = ip.playerName;
+      bp.playerNameAt = ip.playerNameAt || 0;
+    }
     // 标量用「后写胜出」（>=）：本窗口刚算出来的值就是最新的
     if ((ip.currentDeckAt || 0) >= (bp.currentDeckAt || 0) && ip.currentDeckId !== undefined) {
       bp.currentDeckId = ip.currentDeckId;
@@ -277,6 +301,19 @@
     flushTombstones(ip.historyTombstones, pp.historyTombstones, stamp);
     flushTombstones(ip.deckTombstones, pp.deckTombstones, stamp);
     flushTombstones(ip.deckListTombstones, pp.deckListTombstones, stamp);
+    flushTombstones(ip.watchlistTombstones, pp.watchlistTombstones, stamp);
+    var oldWatch = {};
+    (prev && prev.watchlist || []).forEach(function (name) { oldWatch[String(name).toLowerCase()] = true; });
+    var newWatch = {};
+    inc.watchlist.forEach(function (name) {
+      var key = String(name).toLowerCase();
+      newWatch[key] = true;
+      if (!oldWatch[key]) ip.watchlistStamps[key] = stamp(0);
+    });
+    Object.keys(oldWatch).forEach(function (key) {
+      if (!newWatch[key]) ip.watchlistTombstones[key] = stamp(0);
+    });
+    if (ip.playerName !== pp.playerName) ip.playerNameAt = stamp(0);
     if (ip.historyClearedAt && ip.historyClearedAt !== (pp.historyClearedAt || 0)) ip.historyClearedAt = stamp(0);
 
     if (tombstoneMissing) {
@@ -377,7 +414,12 @@
       var before = prevRaw ? JSON.parse(prevRaw).personal || {} : {};
       var after = data.personal || {};
       if (JSON.stringify(before.matchHistory || []) !== JSON.stringify(after.matchHistory || []) ||
-          JSON.stringify(before.historyTombstones || {}) !== JSON.stringify(after.historyTombstones || {})) {
+          JSON.stringify(before.historyTombstones || {}) !== JSON.stringify(after.historyTombstones || {}) ||
+          JSON.stringify(before.decks || {}) !== JSON.stringify(after.decks || {}) ||
+          JSON.stringify(before.deckList || []) !== JSON.stringify(after.deckList || []) ||
+          JSON.stringify(before.watchlistStamps || {}) !== JSON.stringify(after.watchlistStamps || {}) ||
+          JSON.stringify(before.watchlistTombstones || {}) !== JSON.stringify(after.watchlistTombstones || {}) ||
+          before.playerName !== after.playerName || before.currentDeckId !== after.currentDeckId) {
         if (typeof dispatchEvent === 'function' && typeof Event === 'function') {
           dispatchEvent(new Event('ptcg-history-changed'));
         }
@@ -416,12 +458,36 @@
   }
 
   // 云端记录已带有修改时间；保留它，避免每次读取都变成一次新的本机编辑。
-  function mergeCloud(records, deleted, playerName) {
+  function cloudProfile(data) {
+    var d = normalize(deepCopy(data || {}));
+    var p = d.personal;
+    return { version: 1, playerName: p.playerName, playerNameAt: p.playerNameAt,
+      currentDeckId: p.currentDeckId || null, currentDeckAt: p.currentDeckAt || 0,
+      watchlist: d.watchlist, watchlistStamps: p.watchlistStamps,
+      watchlistTombstones: p.watchlistTombstones, decks: p.decks,
+      deckTombstones: p.deckTombstones, deckList: p.deckList,
+      deckListTombstones: p.deckListTombstones };
+  }
+
+  function mergeCloud(records, deleted, playerName, profile) {
     var base = read() || normalize({});
     var remote = normalize({ personal: {
       playerName: playerName || '', matchHistory: deepCopy(records || []),
       historyTombstones: {}, decks: {},
     } });
+    if (profile && profile.version === 1) {
+      remote.watchlist = deepCopy(profile.watchlist || []);
+      remote.personal.playerName = typeof profile.playerName === 'string' ? profile.playerName : remote.personal.playerName;
+      remote.personal.playerNameAt = Number(profile.playerNameAt) || 0;
+      remote.personal.currentDeckId = profile.currentDeckId || null;
+      remote.personal.currentDeckAt = Number(profile.currentDeckAt) || 0;
+      remote.personal.watchlistStamps = deepCopy(profile.watchlistStamps || {});
+      remote.personal.watchlistTombstones = deepCopy(profile.watchlistTombstones || {});
+      remote.personal.decks = deepCopy(profile.decks || {});
+      remote.personal.deckTombstones = deepCopy(profile.deckTombstones || {});
+      remote.personal.deckList = deepCopy(profile.deckList || []);
+      remote.personal.deckListTombstones = deepCopy(profile.deckListTombstones || {});
+    }
     var localById = {};
     (base.personal.matchHistory || []).forEach(function (entry) { if (entry && entry.id) localById[entry.id] = entry; });
     (deleted || []).forEach(function (item) {
@@ -492,6 +558,7 @@
     mutate: mutate,
     applyState: applyState,
     mergeCloud: mergeCloud,
+    cloudProfile: cloudProfile,
     recoverHistory: recoverHistory,
     backups: backups,
     stampOf: stampOf,

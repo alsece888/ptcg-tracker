@@ -12,7 +12,8 @@ function mockTeable() {
     const method = options.method || 'GET';
     calls.push({ method, path: parsed.pathname });
     if (parsed.pathname.endsWith('/field')) {
-      return Response.json([{ id: 'fldUserId', name: '用户ID' }, { id: 'fldRecordId', name: '记录ID' }]);
+      return Response.json([{ id: 'fldUserId', name: '用户ID' }, { id: 'fldRecordId', name: '记录ID' },
+        { id: 'fldProfile', name: '同步资料', type: 'longText' }]);
     }
     if (parsed.pathname.endsWith('/record') && method === 'GET') {
       const filter = JSON.parse(parsed.searchParams.get('filter'));
@@ -161,6 +162,42 @@ test('rejects invalid inputs and unauthorized browser origins', async () => {
     assert.equal((await api('POST', '/api/records/upload', { userId: 'alice', records: [record('account')] }, token)).status, 400);
     assert.equal((await api('POST', '/api/records/upload', { userId: 'alice', records: [record('one')] }, token, 'https://evil.example')).status, 403);
     assert.equal(mock.rows.size, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('profile sync keeps decks, watchlist, atlas and propagates removals', async () => {
+  const mock = mockTeable();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = mock.fetch;
+  try {
+    const token = await register('alice');
+    const profile = { version: 1, playerName: 'Alice', playerNameAt: 10,
+      currentDeckId: 'deck1', currentDeckAt: 10,
+      watchlist: ['rival'], watchlistStamps: { rival: 10 }, watchlistTombstones: {},
+      decks: { deck1: { name: '我的卡组', updatedAt: 10 } }, deckTombstones: {},
+      deckList: [{ id: 'atlas1', name: '对手卡组', icons: ['pikachu'], updatedAt: 10 }],
+      deckListTombstones: {} };
+    const first = await api('POST', '/api/profile', { profile }, token);
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    const read = await api('GET', '/api/records', undefined, token);
+    assert.deepEqual(read.body.profile.watchlist, ['rival']);
+    assert.equal(read.body.profile.decks.deck1.name, '我的卡组');
+    assert.equal(read.body.profile.deckList[0].name, '对手卡组');
+    assert.equal(read.body.records.length, 0);
+    const removal = { ...profile, playerName: '', playerNameAt: 30,
+      watchlist: [], watchlistTombstones: { rival: 20 },
+      deckList: [], deckListTombstones: { atlas1: 20 } };
+    const second = await api('POST', '/api/profile', { profile: removal }, token);
+    assert.equal(second.status, 200);
+    assert.deepEqual(second.body.profile.watchlist, []);
+    assert.deepEqual(second.body.profile.deckList, []);
+    assert.equal(second.body.profile.playerName, '');
+    const stale = await api('POST', '/api/profile', { profile }, token);
+    assert.deepEqual(stale.body.profile.watchlist, []);
+    assert.deepEqual(stale.body.profile.deckList, []);
+    assert.equal(stale.body.profile.playerName, '');
+    assert.equal((await api('GET', '/api/records', undefined, token)).body.profile.decks.deck1.name, '我的卡组');
+    assert.equal((await api('POST', '/api/profile', { profile }, '', 'https://evil.example')).status, 403);
   } finally { globalThis.fetch = originalFetch; }
 });
 

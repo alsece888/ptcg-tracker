@@ -170,7 +170,7 @@ function cleanCount(value) {
 }
 
 function entryToFields(userId, entry, playerName) {
-  if (!entry || typeof entry !== 'object' || !ENTRY_ID.test(entry.id || '') || entry.id === 'account') {
+  if (!entry || typeof entry !== 'object' || !ENTRY_ID.test(entry.id || '') || ['account', 'profile'].includes(entry.id)) {
     throw new HttpError(400, '存在无效的记录 ID');
   }
   const time = entry.time == null ? null : parseDate(entry.time);
@@ -205,7 +205,7 @@ function fieldsToEntry(userId, fields) {
   const composite = fields['记录ID'];
   if (typeof composite !== 'string' || !composite.startsWith(`${userId}:`)) return null;
   const id = composite.slice(userId.length + 1);
-  if (!ENTRY_ID.test(id) || id === 'account') return null;
+  if (!ENTRY_ID.test(id) || ['account', 'profile'].includes(id)) return null;
   const entry = {
     id,
     deckId: fields['我的卡组ID'] || null,
@@ -235,7 +235,7 @@ function fieldsToDeletion(userId, fields) {
 }
 
 function deletionToFields(userId, item) {
-  if (!item || !ENTRY_ID.test(item.id || '') || item.id === 'account') {
+  if (!item || !ENTRY_ID.test(item.id || '') || ['account', 'profile'].includes(item.id)) {
     throw new HttpError(400, '存在无效的删除记录 ID');
   }
   const deletedAt = parseDate(item.deletedAt);
@@ -262,6 +262,68 @@ async function rateLimit(request, env, userId, write) {
   const byId = await binding.limit({ key: `id:${userId}` });
   const byIp = await binding.limit({ key: `ip:${ip}` });
   if (!byId.success || !byIp.success) throw new HttpError(429, '请求过于频繁，请稍后重试');
+}
+
+function parseProfile(row) {
+  if (!row?.fields?.['同步资料']) return null;
+  try {
+    const profile = JSON.parse(row.fields['同步资料']);
+    return profile?.version === 1 ? profile : null;
+  } catch { throw new Error('Teable 同步资料格式有误'); }
+}
+
+function profileObject(value) {
+  if (!value || value.version !== 1 || !Array.isArray(value.watchlist) || !Array.isArray(value.deckList) ||
+      !value.decks || typeof value.decks !== 'object' || Array.isArray(value.decks)) {
+    throw new HttpError(400, '同步资料格式有误');
+  }
+  if (value.watchlist.length > 500 || value.deckList.length > 500 || Object.keys(value.decks).length > 500 ||
+      JSON.stringify(value).length > 80_000) throw new HttpError(413, '同步资料过大');
+  return value;
+}
+
+function mergeStampMap(a, b) {
+  const result = { ...(a || {}) };
+  for (const [key, value] of Object.entries(b || {})) result[key] = Math.max(Number(result[key]) || 0, Number(value) || 0);
+  return result;
+}
+
+function mergeProfile(oldValue, newValue) {
+  if (!oldValue) return newValue;
+  const old = profileObject(oldValue);
+  const next = profileObject(newValue);
+  const merged = { version: 1,
+    watchlistStamps: mergeStampMap(old.watchlistStamps, next.watchlistStamps),
+    watchlistTombstones: mergeStampMap(old.watchlistTombstones, next.watchlistTombstones),
+    deckTombstones: mergeStampMap(old.deckTombstones, next.deckTombstones),
+    deckListTombstones: mergeStampMap(old.deckListTombstones, next.deckListTombstones),
+  };
+  const names = new Map();
+  [...old.watchlist, ...next.watchlist].forEach((name) => {
+    if (typeof name === 'string' && name.trim()) names.set(name.toLowerCase(), name);
+  });
+  merged.watchlist = [...names].filter(([key]) =>
+    !merged.watchlistTombstones[key] || merged.watchlistStamps[key] > merged.watchlistTombstones[key]).map(([, name]) => name);
+  merged.decks = { ...old.decks };
+  for (const [id, deck] of Object.entries(next.decks)) {
+    if (!merged.decks[id] || Number(deck?.updatedAt || 0) > Number(merged.decks[id]?.updatedAt || 0)) merged.decks[id] = deck;
+  }
+  for (const [id, deletedAt] of Object.entries(merged.deckTombstones)) {
+    if (deletedAt >= Number(merged.decks[id]?.updatedAt || 0)) delete merged.decks[id];
+  }
+  const atlas = new Map();
+  [...old.deckList, ...next.deckList].forEach((item) => {
+    if (item?.id && (!atlas.has(item.id) || Number(item.updatedAt || 0) > Number(atlas.get(item.id).updatedAt || 0))) atlas.set(item.id, item);
+  });
+  merged.deckList = [...atlas.values()].filter((item) =>
+    !merged.deckListTombstones[item.id] || merged.deckListTombstones[item.id] < Number(item.updatedAt || 0));
+  const nameWinner = (next.playerNameAt || 0) > (old.playerNameAt || 0) ? next : old;
+  merged.playerName = typeof nameWinner.playerName === 'string' ? nameWinner.playerName : (old.playerName || next.playerName || '');
+  merged.playerNameAt = Math.max(old.playerNameAt || 0, next.playerNameAt || 0);
+  const deckWinner = (next.currentDeckAt || 0) > (old.currentDeckAt || 0) ? next : old;
+  merged.currentDeckId = deckWinner.currentDeckId || null;
+  merged.currentDeckAt = Math.max(old.currentDeckAt || 0, next.currentDeckAt || 0);
+  return profileObject(merged);
 }
 
 export default {
@@ -312,11 +374,34 @@ export default {
         const userId = await sessionUser(request, env);
         await rateLimit(request, env, userId, false);
         const rows = await recordsForUser(env, userId);
+        const profile = parseProfile(rows.find((row) => row.fields['记录ID'] === `${userId}:profile`));
         const deleted = rows.map((row) => fieldsToDeletion(userId, row.fields)).filter(Boolean);
         const deletedIds = new Set(deleted.map((item) => item.id));
         const parsed = rows.map((row) => fieldsToEntry(userId, row.fields)).filter(Boolean);
-        return response({ userId, playerName: parsed.find((x) => x.playerName)?.playerName || '',
-          records: parsed.map((x) => x.entry).filter((entry) => !deletedIds.has(entry.id)), deleted }, 200, origin);
+        return response({ userId, playerName: profile ? profile.playerName : (parsed.find((x) => x.playerName)?.playerName || ''),
+          records: parsed.map((x) => x.entry).filter((entry) => !deletedIds.has(entry.id)), deleted, profile }, 200, origin);
+      }
+      if (url.pathname === '/api/profile' && request.method === 'POST') {
+        if (!origin) throw new HttpError(403, '仅允许从本站同步');
+        const userId = await sessionUser(request, env);
+        await rateLimit(request, env, userId, true);
+        const body = await readBody(request);
+        const incoming = profileObject(body.profile);
+        const rows = await recordsForUser(env, userId);
+        const row = rows.find((item) => item.fields['记录ID'] === `${userId}:profile`);
+        const profile = mergeProfile(parseProfile(row), incoming);
+        const fields = { '记录ID': `${userId}:profile`, '用户ID': userId,
+          '同步资料': JSON.stringify(profile), '最后修改时间': new Date().toISOString() };
+        if (row) {
+          if (row.fields['同步资料'] !== fields['同步资料']) {
+            await teable(env, teablePath(env, `/record/${encodeURIComponent(row.id)}`), {
+              method: 'PATCH', body: JSON.stringify({ record: { fields } }),
+            });
+          }
+        } else {
+          await teable(env, teablePath(env, '/record'), { method: 'POST', body: JSON.stringify({ records: [{ fields }] }) });
+        }
+        return response({ profile }, 200, origin);
       }
       if (url.pathname === '/api/records/upload' && request.method === 'POST') {
         if (!origin) throw new HttpError(403, '仅允许从本站上传');

@@ -1,6 +1,6 @@
 {
   "name": "PTCG 胜负记录",
-  "description": "普通行对应一条用户对局记录；每个用户另有一条账号行，保存密码盐和密码校验值，不保存明文密码。",
+  "description": "对局、账号与同步资料共用一张表。密码明文不会保存。",
   "fields": [
     { "name": "记录ID", "type": "singleLineText", "unique": true, "notNull": true },
     { "name": "用户ID", "type": "singleLineText", "notNull": true },
@@ -15,6 +15,7 @@
     { "name": "负场数", "type": "number" },
     { "name": "最后修改时间", "type": "date" },
     { "name": "密码盐", "type": "singleLineText" },
-    { "name": "密码校验值", "type": "singleLineText" }
+    { "name": "密码校验值", "type": "singleLineText" },
+    { "name": "同步资料", "type": "longText" }
   ]
 }

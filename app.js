@@ -513,7 +513,7 @@ function loadData() {
       }
     }
     // 注入默认卡组图鉴：新用户或未设置卡组的用户首次加载时自动填充
-    if (!state.personal.deckList || state.personal.deckList.length === 0) {
+    if (data && data.personal && !Array.isArray(data.personal.deckList) && state.personal.playerName) {
       state.personal.deckList = DEFAULT_DECK_LIST.map(d => ({
         id: uuid(),
         name: d.name,
@@ -879,94 +879,6 @@ function saveNote(name) {
 }
 
 // ============================================================
-// 导入/导出
-// ============================================================
-
-function exportData() {
-  const data = {
-    watchlist: state.watchlist,
-    lastUpdate: state.lastUpdate,
-    players: state.players,
-    notes: state.notes,
-    personal: state.personal,
-    exportedAt: new Date().toISOString(),
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `ptcg-tracker-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('数据已导出', 'success');
-}
-
-function importData(file) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse(e.target.result);
-      applyImportedData(data);
-    } catch (err) {
-      showToast('导入失败: ' + err.message, 'error');
-    }
-  };
-  reader.readAsText(file);
-}
-
-function applyImportedData(data) {
-  if (!Array.isArray(data.watchlist)) throw new Error('文件格式不正确');
-  state.watchlist = data.watchlist || [];
-  state.lastUpdate = data.lastUpdate || null;
-  state.players = data.players || {};
-  state.notes = data.notes || {};
-  state.personal = data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null };
-  if (!state.personal.deckList) state.personal.deckList = [];
-  if (state.personal.draftMatch === undefined) state.personal.draftMatch = null;
-  // 导入是「合并」而不是「清空重来」：本地已有的对局记录不会被导入文件里的旧版本顶掉
-  saveData({ tombstoneMissing: false });
-  render();
-  renderPersonalSection();
-  showToast('数据导入成功', 'success');
-}
-
-// 粘贴导入
-function openPasteModal() {
-  $('pasteModal').style.display = 'flex';
-  $('pasteInput').value = '';
-  $('pasteMsg').textContent = '';
-  $('pasteMsg').className = 'paste-msg';
-  setTimeout(() => $('pasteInput').focus(), 100);
-}
-
-function closePasteModal() {
-  $('pasteModal').style.display = 'none';
-}
-
-function confirmPasteImport() {
-  const raw = $('pasteInput').value.trim();
-  if (!raw) {
-    $('pasteMsg').textContent = '请先粘贴数据';
-    $('pasteMsg').className = 'paste-msg error';
-    return;
-  }
-  try {
-    let data;
-    // 支持粘贴原始 localStorage JSON 字符串或已格式化的 JSON
-    if (raw.startsWith('{')) {
-      data = JSON.parse(raw);
-    } else {
-      // 可能是双重编码的字符串
-      data = JSON.parse(JSON.parse(raw));
-    }
-    applyImportedData(data);
-    closePasteModal();
-  } catch (err) {
-    $('pasteMsg').textContent = '数据格式错误，请确认完整粘贴: ' + err.message;
-    $('pasteMsg').className = 'paste-msg error';
-  }
-}
-
 function clearAllData() {
   if (!confirm('确定清空所有数据吗？此操作不可恢复！')) return;
   if (!confirm('再次确认：将删除所有关注玩家、战绩和备注。')) return;
@@ -1078,6 +990,7 @@ function cumulativeByEntry(history) {
 function renderPersonalSection() {
   const p = state.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] };
   const hasPlayer = !!p.playerName;
+  $('personalSection').classList.toggle('has-player', hasPlayer);
   const decks = p.decks || {};
   const deckIds = Object.keys(decks);
   const curDeck = decks[p.currentDeckId];
@@ -1199,7 +1112,7 @@ function updatePersonalSyncStatus() {
 }
 
 // 排位基准值：只留一份参考数字，不再据此生成任何对局记录
-// （状态角标和「导出全部数据」还会用到它，所以照旧写回存储）
+// 排位状态角标仍会用到它，所以照旧写回存储。
 function recordApiSnapshot(apiWins, apiLosses) {
   if (!window.PtcgStore) return;
   const merged = PtcgStore.mutate((d) => {
@@ -1219,7 +1132,11 @@ function setPersonalPlayer() {
     $('personalSetupMsg').className = 'add-result error';
     return;
   }
+  const firstSetup = !state.personal.playerName;
   state.personal.playerName = name;
+  if (firstSetup && (!state.personal.deckList || state.personal.deckList.length === 0)) {
+    state.personal.deckList = DEFAULT_DECK_LIST.map(d => ({ id: uuid(), name: d.name, icons: [...d.icons] }));
+  }
   if (!state.personal.decks) state.personal.decks = {};
   if (!state.personal.matchHistory) state.personal.matchHistory = [];
   saveData();
@@ -1541,12 +1458,12 @@ function batchAddDeckToList() {
 
   const msg = $('batchImportResult');
   if (msg) {
-    if (added > 0) msg.textContent = '成功导入 ' + added + ' 个卡组';
+    if (added > 0) msg.textContent = '成功添加 ' + added + ' 个卡组';
     if (skipped > 0) msg.textContent += '，跳过 ' + skipped + ' 个（已存在）';
-    if (added === 0) msg.textContent = '所有卡组都已存在，无需导入';
+    if (added === 0) msg.textContent = '所有卡组都已存在，无需重复添加';
     setTimeout(() => { msg.textContent = ''; }, 3000);
   }
-  showToast('成功导入 ' + added + ' 个卡组' + (skipped > 0 ? '，' + skipped + ' 个已跳过' : ''), 'success');
+  showToast('成功添加 ' + added + ' 个卡组' + (skipped > 0 ? '，' + skipped + ' 个已跳过' : ''), 'success');
 }
 
 function removeDeckFromList(id) {
@@ -2100,58 +2017,6 @@ function deleteHistoryEntry(id) {
   showToast('记录已删除');
 }
 
-function exportHistory() {
-  const history = state.personal.matchHistory || [];
-  if (history.length === 0) {
-    showToast('暂无对局历史可导出', 'error');
-    return;
-  }
-
-  const headers = ['时间', '使用卡组', '结果', '对手卡组', '先后手', '胜场增量', '败场增量', '累计胜场', '累计败场'];
-  const cumById = cumulativeByEntry(history);
-  const rows = [...history].sort((a, b) => entryTime(a) - entryTime(b)).map(h => {
-    const d = new Date(entryTime(h) || Date.now());
-    const timeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    const turnMap = { first: '先攻', second: '后攻' };
-    const r = resultOfEntry(h);
-    const cum = cumById[h.id] || { wins: 0, losses: 0 };
-    return [
-      timeStr,
-      h.deckName || '',
-      r === 'win' ? '胜' : (r === 'loss' ? '负' : '未知'),
-      h.opponentDeck || '',
-      turnMap[h.firstMove] || '',
-      entryWins(h),
-      entryLosses(h),
-      cum.wins,
-      cum.losses,
-    ];
-  });
-
-  // CSV with BOM for Excel Chinese support
-  const csv = '\uFEFF' + [headers, ...rows].map(r =>
-    r.map(cell => {
-      const s = String(cell);
-      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-        return '"' + s.replace(/"/g, '""') + '"';
-      }
-      return s;
-    }).join(',')
-  ).join('\n');
-
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  // 用本地日期做文件名（toISOString 是 UTC，晚上导出会差一天）
-  const today = new Date();
-  const stamp = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
-  a.download = `ptcg-对局历史-${stamp}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast(`已导出 ${history.length} 条对局历史`, 'success');
-}
-
 function pad(n) { return String(n).padStart(2, '0'); }
 
 function openDeckManage() {
@@ -2493,9 +2358,6 @@ $('newDeckInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); createDeck(); }
 });
 $('clearHistoryBtn').addEventListener('click', clearHistory);
-$('exportHistoryBtn').addEventListener('click', () => {
-  exportHistory();
-});
 $('addDeckListBtn').addEventListener('click', addDeckToList);
 $('toggleDeckListBtn').addEventListener('click', () => {
   const body = $('deckListEntriesBody');
@@ -2580,14 +2442,6 @@ document.addEventListener('click', () => {
 menuDropdown.addEventListener('click', (e) => e.stopPropagation());
 
 $('autoRefreshToggle').addEventListener('click', toggleAutoRefresh);
-$('exportBtn').addEventListener('click', () => {
-  menuDropdown.style.display = 'none';
-  exportData();
-});
-$('importBtn').addEventListener('click', () => {
-  menuDropdown.style.display = 'none';
-  openPasteModal();
-});
 $('clearBtn').addEventListener('click', () => {
   menuDropdown.style.display = 'none';
   clearAllData();
@@ -2688,30 +2542,6 @@ $('relayModal').addEventListener('click', (e) => {
   if (target) badge.textContent = target.name;
 })();
 
-// 头部直接可见的导出/导入按钮
-$('exportBtn2').addEventListener('click', exportData);
-$('importBtn2').addEventListener('click', openPasteModal);
-
-// 个人战绩模块导出/导入按钮
-$('exportAllBtn').addEventListener('click', exportData);
-$('importAllBtn').addEventListener('click', openPasteModal);
-$('importFile').addEventListener('change', (e) => {
-  if (e.target.files[0]) importData(e.target.files[0]);
-  e.target.value = '';
-});
-
-// 粘贴导入弹窗事件
-$('pasteModalClose').addEventListener('click', closePasteModal);
-$('pasteCancelBtn').addEventListener('click', closePasteModal);
-$('pasteConfirmBtn').addEventListener('click', confirmPasteImport);
-$('pasteModal').addEventListener('click', (e) => {
-  if (e.target === $('pasteModal')) closePasteModal();
-});
-$('pasteInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.ctrlKey) confirmPasteImport();
-});
-
-// ============================================================
 // 悬浮窗
 // ============================================================
 
@@ -2734,7 +2564,7 @@ $('popupBtn').addEventListener('click', async () => {
     try {
       const pipWindow = await documentPictureInPicture.requestWindow({
         width: 400,
-        height: 560,
+        height: 620,
       });
 
       // 将 popup.html 内容写入 PiP 窗口
@@ -2764,7 +2594,7 @@ $('popupBtn').addEventListener('click', async () => {
 
   // 回退：普通浏览器窗口（不置顶）
   popupWindow = window.open(popupUrl, 'ptcg-popup',
-    'width=380,height=520,left=' + (screen.width - 400) + ',top=100');
+    'width=400,height=620,left=' + (screen.width - 420) + ',top=100');
   if (popupWindow) {
     const checkClosed = setInterval(() => {
       if (popupWindow.closed) { popupWindow = null; clearInterval(checkClosed); }
@@ -2845,7 +2675,7 @@ applyTheme(getTheme());
 // 在 saveData 后通知 popup（本地窗口 storage 事件不会触发，用 BroadcastChannel 补上）
 const _originalSaveData = saveData;
 saveData = function () {
-  _originalSaveData.apply(null, arguments); // 透传参数（导入时要用 tombstoneMissing 选项）
+  _originalSaveData.apply(null, arguments);
   notifyPopupDataUpdated();
 };
 
@@ -2857,241 +2687,6 @@ refreshApiOverview = async function () {
 };
 
 // ============================================================
-// 域名迁移：旧域名 → malo-ptcg.cn 自动迁移用户数据
-// ============================================================
-
-const NEW_DOMAIN = 'malo-ptcg.cn';
-
-// 新域名：检测 URL hash / query 中的迁移数据并自动导入
-function checkAndImportMigrationData() {
-  // Check both hash and query params (recovery page uses ?migrate=)
-  const params = new URLSearchParams(window.location.search);
-  const hashMigrate = window.location.hash;
-  const hashData = hashMigrate && hashMigrate.startsWith('#migrate=') ? hashMigrate.substring(9) : null;
-  const queryData = params.get('migrate');
-  const encoded = queryData || hashData;
-  if (!encoded) return false;
-
-  try {
-    const jsonStr = decodeURIComponent(atob(encoded));
-    const data = JSON.parse(jsonStr);
-
-    state = {
-      watchlist: data.watchlist || [],
-      lastUpdate: data.lastUpdate || null,
-      players: data.players || {},
-      notes: data.notes || {},
-      personal: data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [] },
-    };
-    if (!state.personal.deckList) state.personal.deckList = [];
-    saveData({ tombstoneMissing: false });
-
-    // 清除 migrate 参数，避免刷新时重复导入
-    var url = new URL(window.location.href);
-    url.searchParams.delete('migrate');
-    url.hash = '';
-    history.replaceState(null, '', url.toString());
-
-    showToast('数据迁移成功！欢迎使用新域名', 'success');
-    return true;
-  } catch (e) {
-    console.error('迁移数据导入失败:', e);
-    showToast('自动迁移失败，请使用导出/导入功能手动迁移', 'error');
-    return false;
-  }
-}
-
-// 旧域名：postMessage 导出模式（由新域名弹窗触发）
-function handleLegacyExport() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    if (window.opener) {
-      window.opener.postMessage({ type: 'ptcg-legacy-import', success: false, error: '旧域名没有找到数据，请确认旧域名中是否有使用记录' }, '*');
-    }
-    setTimeout(function() { window.close(); }, 1000);
-    return;
-  }
-  if (window.opener) {
-    window.opener.postMessage({ type: 'ptcg-legacy-import', success: true, data: raw }, '*');
-  }
-  setTimeout(function() { window.close(); }, 500);
-}
-
-// 旧域名：检测是否有数据需要迁移，显示迁移横幅
-function checkDomainMigration() {
-  const currentHost = window.location.hostname;
-  if (currentHost === NEW_DOMAIN || currentHost === 'www.' + NEW_DOMAIN) return;
-
-  // 检查是否是 postMessage 导出模式
-  var params = new URLSearchParams(window.location.search);
-  if (params.get('mode') === 'export') {
-    handleLegacyExport();
-    return;
-  }
-
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return;
-
-  const dismissed = localStorage.getItem('ptcg-migration-dismissed');
-  if (dismissed === '1') return;
-
-  showMigrationBanner();
-}
-
-function showMigrationBanner() {
-  if (document.getElementById('migrationBanner')) return;
-  const banner = document.createElement('div');
-  banner.id = 'migrationBanner';
-  banner.innerHTML = `
-    <span class="mb-text">🎉 网站已迁移到 <strong>malo-ptcg.cn</strong>，点击一键迁移你的数据</span>
-    <span class="mb-actions">
-      <button id="migrateBtn" class="mb-btn-primary">立即迁移</button>
-      <button id="dismissMigrateBtn" class="mb-btn-dismiss">稍后</button>
-    </span>
-  `;
-  document.body.prepend(banner);
-
-  document.getElementById('migrateBtn').addEventListener('click', performMigration);
-  document.getElementById('dismissMigrateBtn').addEventListener('click', () => {
-    localStorage.setItem('ptcg-migration-dismissed', '1');
-    banner.remove();
-  });
-}
-
-function performMigration() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return;
-  try {
-    const encoded = btoa(encodeURIComponent(raw));
-    window.location.href = `https://${NEW_DOMAIN}/#migrate=${encoded}`;
-  } catch (e) {
-    showToast('数据较大，正在跳转到新域名...', 'info');
-    setTimeout(() => { window.location.href = `https://${NEW_DOMAIN}/`; }, 1500);
-  }
-}
-
-// ============================================================
-// 新域名：一键从旧域名导入数据（postMessage 方式）
-// ============================================================
-
-var _legacyImportTimer = null;
-
-function startLegacyImport() {
-  var w = 480, h = 280;
-  var left = (screen.width - w) / 2;
-  var top = (screen.height - h) / 2;
-  var win = window.open(
-    'https://alsece888.github.io/ptcg-tracker/?mode=export',
-    'ptcg-legacy-import',
-    'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top
-  );
-  if (!win) {
-    showLegacyImportFallback();
-    return;
-  }
-  showToast('正在尝试从旧域名读取数据...', 'info');
-
-  // 3秒后如果没收到 postMessage（CNAME 重定向导致弹窗跳转到新域名），显示手动迁移指引
-  _legacyImportTimer = setTimeout(function() {
-    if (win && !win.closed) { win.close(); }
-    showLegacyImportFallback();
-  }, 3500);
-}
-
-function showLegacyImportFallback() {
-  if (document.getElementById('legacyImportFallback')) return;
-  var overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.id = 'legacyImportFallback';
-  overlay.innerHTML =
-    '<div class="modal-box legacy-modal">' +
-      '<h3>📥 从旧域名导入数据</h3>' +
-      '<p class="legacy-desc">旧域名已自动跳转到新域名，弹窗方式无法读取数据。请使用以下方式迁移：</p>' +
-      '<div class="legacy-methods">' +
-        '<div class="legacy-method">' +
-          '<strong>方式一：JSON 文件导入</strong>' +
-          '<p>如果你之前在旧域名导出过 JSON 数据文件：</p>' +
-          '<button class="btn btn-primary" id="legacyFileImport">📤 选择 JSON 文件导入</button>' +
-        '</div>' +
-        '<div class="legacy-method">' +
-          '<strong>方式二：手动复制数据</strong>' +
-          '<ol>' +
-            '<li>用浏览器打开旧域名，按 <b>F12</b> 打开开发者工具</li>' +
-            '<li>进入 <b>Application</b> → <b>Local Storage</b> → <code>alsece888.github.io</code></li>' +
-            '<li>复制 <code>ptcg-tracker-data</code> 的值</li>' +
-            '<li>回到本页面，点击下方按钮粘贴：</li>' +
-          '</ol>' +
-          '<button class="btn btn-secondary" id="legacyPasteImport">📋 粘贴数据导入</button>' +
-        '</div>' +
-      '</div>' +
-      '<button class="btn btn-ghost legacy-close-btn" id="legacyCloseFallback">关闭</button>' +
-    '</div>';
-  document.body.appendChild(overlay);
-
-  overlay.addEventListener('click', function(e) {
-    if (e.target === overlay) { overlay.remove(); }
-  });
-  document.getElementById('legacyCloseFallback').addEventListener('click', function() { overlay.remove(); });
-  document.getElementById('legacyFileImport').addEventListener('click', function() {
-    overlay.remove();
-    document.getElementById('importFile').click();
-  });
-  document.getElementById('legacyPasteImport').addEventListener('click', function() {
-    overlay.remove();
-    openPasteModal();
-  });
-}
-
-function setupLegacyImport() {
-  var host = window.location.hostname;
-  if (host !== NEW_DOMAIN && host !== 'www.' + NEW_DOMAIN) return;
-
-  // 监听来自旧域名的 postMessage
-  window.addEventListener('message', function(event) {
-    if (!event.data || event.data.type !== 'ptcg-legacy-import') return;
-    // 收到消息，清除 fallback 定时器
-    if (_legacyImportTimer) { clearTimeout(_legacyImportTimer); _legacyImportTimer = null; }
-    if (event.data.success && event.data.data) {
-      try {
-        var data = JSON.parse(event.data.data);
-        state = {
-          watchlist: data.watchlist || [],
-          lastUpdate: data.lastUpdate || null,
-          players: data.players || {},
-          notes: data.notes || {},
-          personal: data.personal || { playerName: '', currentDeckId: null, decks: {}, matchHistory: [], draftMatch: null },
-        };
-        if (!state.personal.deckList) state.personal.deckList = [];
-      if (state.personal.draftMatch === undefined) state.personal.draftMatch = null;
-        saveData({ tombstoneMissing: false });
-        showToast('数据导入成功！', 'success');
-        setTimeout(function() { location.reload(); }, 800);
-      } catch (e) {
-        showToast('数据格式错误，导入失败', 'error');
-      }
-    } else {
-      showToast(event.data.error || '导入失败', 'error');
-    }
-  });
-
-  // 动态添加"从旧版导入"按钮到头部
-  var headerRight = document.querySelector('.header-right');
-  if (!headerRight) return;
-  var importBtn = document.createElement('button');
-  importBtn.id = 'legacyImportBtn';
-  importBtn.className = 'btn btn-legacy';
-  importBtn.title = '从旧域名导入历史数据';
-  importBtn.innerHTML = '<span class="btn-icon">📥</span><span class="btn-text">导入旧数据</span>';
-  importBtn.addEventListener('click', startLegacyImport);
-  // 插入到菜单按钮之前
-  var menuBtn = document.getElementById('menuBtn');
-  if (menuBtn) {
-    headerRight.insertBefore(importBtn, menuBtn);
-  } else {
-    headerRight.appendChild(importBtn);
-  }
-}
-
 // 屏幕宽度变化时切换表格 / 卡片列表
 let mobileResizeTimer = null;
 mobileMedia.addEventListener('change', () => {
@@ -3103,16 +2698,7 @@ mobileMedia.addEventListener('change', () => {
 // 初始化
 // ============================================================
 
-// 新域名优先检测迁移数据（URL hash / query 方式）
-checkAndImportMigrationData();
-
 loadData();
 render();
 renderPersonalSection();
-// 对局记录一律手动添加（记录卡里点胜/负），因此这里不再起定时同步
-
-// 旧域名检测迁移横幅
-checkDomainMigration();
-
-// 新域名设置一键导入
-setupLegacyImport();
+// 对局记录由玩家手动添加；云端同步由 cloud.js 管理。

@@ -3,7 +3,7 @@
   const BOUND_KEY = 'ptcg-cloud-user-id';
   const SESSION_KEY = 'ptcg-cloud-session';
   const BATCH_SIZE = 10;
-  const SYNC_INTERVAL_MS = 30000;
+  const SYNC_INTERVAL_MS = 10 * 60 * 1000;
   const SYNC_DEBOUNCE_MS = 1200;
   const PBKDF2_ITERATIONS = 600000;
   const idInput = document.getElementById('cloudUserIdInput');
@@ -14,8 +14,7 @@
   const loginBtn = document.getElementById('cloudLoginBtn');
   const logoutBtn = document.getElementById('cloudLogoutBtn');
   const uploadBtn = document.getElementById('cloudUploadBtn');
-  const restoreBtn = document.getElementById('cloudRestoreBtn');
-  const buttons = [registerBtn, loginBtn, logoutBtn, uploadBtn, restoreBtn];
+  const buttons = [registerBtn, loginBtn, logoutBtn, uploadBtn];
   const api = (window.PTCG_CLOUD_API_URL || '').replace(/\/$/, '');
   let syncTimer = null;
   let syncPromise = null;
@@ -30,6 +29,14 @@
     status.classList.toggle('cloud-error', !!error);
   }
 
+  function stableJson(value) {
+    if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+    if (value && typeof value === 'object') {
+      return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value);
+  }
+
   function savedSession() {
     try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); }
     catch { return null; }
@@ -39,11 +46,10 @@
     const session = savedSession();
     const active = !!session?.token && session.userId === idInput.value.trim().toLowerCase();
     uploadBtn.disabled = !active || !api;
-    restoreBtn.disabled = !active || !api;
     logoutBtn.style.display = active ? '' : 'none';
     registerBtn.style.display = active ? 'none' : '';
     loginBtn.style.display = active ? 'none' : '';
-    if (active) setStatus(`已登录：${session.userId}。战绩将自动同步。`);
+    if (active) setStatus(`已登录：${session.userId}。对局、卡组、关注列表和图鉴将自动同步。`);
     else if (!api) setStatus('云端服务尚未配置，当前仍只保存在本机。');
     else setStatus('请注册或登录当前用户 ID。');
     updateAuthUiButtonsOnly();
@@ -55,9 +61,13 @@
       throw new Error('用户 ID 需为 3–32 位小写字母、数字、_ 或 -，且以字母或数字开头');
     }
     const bound = localStorage.getItem(BOUND_KEY);
-    const localCount = (PtcgStore.read()?.personal?.matchHistory || []).length;
-    if (bound && bound !== id && localCount) {
-      throw new Error(`本机记录已关联 ID「${bound}」。请先导出备份并清空本机数据，再切换 ID。`);
+    const local = PtcgStore.read() || {};
+    const personal = local.personal || {};
+    const hasLocalData = !!personal.playerName || (personal.matchHistory || []).length > 0 ||
+      Object.keys(personal.decks || {}).length > 0 || (personal.deckList || []).length > 0 ||
+      (local.watchlist || []).length > 0;
+    if (bound && bound !== id && hasLocalData) {
+      throw new Error(`本机记录已关联 ID「${bound}」。如需切换账号，请先清空本机数据。`);
     }
     return id;
   }
@@ -113,7 +123,6 @@
     const session = savedSession();
     const active = !!session?.token && session.userId === idInput.value.trim().toLowerCase();
     uploadBtn.disabled = !active || !api;
-    restoreBtn.disabled = !active || !api;
     registerBtn.disabled = !api;
     loginBtn.disabled = !api;
   }
@@ -189,21 +198,22 @@
     syncTimer = setTimeout(() => { syncRecords().catch((error) => setStatus(error.message || '同步失败', true)); }, delay);
   }
 
-  async function syncRecords({ pullOnly = false } = {}) {
+  async function syncRecords() {
     if (!activeSession()) return;
     if (syncPromise) { syncAgain = true; return syncPromise; }
     syncPromise = (async () => {
     const id = userId();
-    setStatus('正在同步云端战绩…');
+    setStatus('正在同步对局、卡组和关注列表…');
     const body = await request('/api/records', {}, true);
     if (body.userId !== id || !Array.isArray(body.records) || !Array.isArray(body.deleted)) throw new Error('云端数据格式有误');
     const before = PtcgStore.read();
     applyingRemote = true;
     let merged;
     try {
-      merged = PtcgStore.mergeCloud(body.records, body.deleted, body.playerName);
-      if (JSON.stringify(before?.personal || {}) !== JSON.stringify(merged.personal)) {
+      merged = PtcgStore.mergeCloud(body.records, body.deleted, body.playerName, body.profile);
+      if (JSON.stringify(before) !== JSON.stringify(merged)) {
         loadData();
+        render();
         renderPersonalSection();
         if (typeof notifyPopupDataUpdated === 'function') notifyPopupDataUpdated();
       }
@@ -211,7 +221,7 @@
       applyingRemote = false;
     }
     let sentRecords = 0, sentDeleted = 0;
-    if (!pullOnly) {
+    {
       const local = PtcgStore.read();
       const personal = local.personal;
       const cloudById = new Map(body.records.map((entry) => [entry.id, entry]));
@@ -238,9 +248,24 @@
         sentRecords += batch.filter((item) => item.record).length;
         sentDeleted += batch.filter((item) => item.deleted).length;
       }
+      const profile = PtcgStore.cloudProfile(PtcgStore.read());
+      if (!body.profile || stableJson(profile) !== stableJson(body.profile)) {
+        const saved = await request('/api/profile', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profile }),
+        }, true);
+        if (stableJson(saved.profile) !== stableJson(profile)) {
+          applyingRemote = true;
+          try {
+            PtcgStore.mergeCloud([], [], '', saved.profile);
+            loadData(); render(); renderPersonalSection();
+            if (typeof notifyPopupDataUpdated === 'function') notifyPopupDataUpdated();
+          } finally { applyingRemote = false; }
+        }
+      }
     }
     const at = new Date();
-    setStatus(`已登录：${id}。已自动同步至 ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}；本次读取 ${body.records.length} 条${sentRecords || sentDeleted ? `，发送 ${sentRecords} 条记录、${sentDeleted} 条删除标记` : ''}。`);
+    setStatus(`已同步至 ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')} · ${body.records.length} 条对局 · 卡组、关注列表、图鉴已同步。`);
     })();
     try { return await syncPromise; }
     finally {
@@ -250,7 +275,6 @@
   }
 
   uploadBtn.addEventListener('click', () => run(() => syncRecords()));
-  restoreBtn.addEventListener('click', () => run(() => syncRecords({ pullOnly: true })));
 
   window.addEventListener('ptcg-history-changed', () => queueSync());
   window.addEventListener('storage', (event) => {

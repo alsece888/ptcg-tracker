@@ -7,7 +7,7 @@ const source = await readFile(new URL('../cloud.js', import.meta.url), 'utf8');
 
 function browser(responses, initial = {}) {
   const ids = ['cloudUserIdInput', 'cloudPasswordInput', 'cloudPasswordConfirmInput', 'cloudStatus',
-    'cloudRegisterBtn', 'cloudLoginBtn', 'cloudLogoutBtn', 'cloudUploadBtn', 'cloudRestoreBtn'];
+    'cloudRegisterBtn', 'cloudLoginBtn', 'cloudLogoutBtn', 'cloudUploadBtn'];
   const elements = Object.fromEntries(ids.map((id) => [id, {
     value: '', disabled: false, style: {}, textContent: '', listeners: {},
     classList: { toggle() {} },
@@ -23,14 +23,18 @@ function browser(responses, initial = {}) {
   const sessionStorage = storage();
   const calls = [];
   const windowListeners = {};
+  const intervals = [];
   let data = { personal: { playerName: 'Alice', matchHistory: initial.records || [], historyTombstones: initial.deleted || {} } };
   const context = {
     window: { PTCG_CLOUD_API_URL: 'https://bridge.example', addEventListener(name, callback) { windowListeners[name] = callback; } },
     document: { hidden: false, getElementById: (id) => elements[id], addEventListener() {} },
     localStorage, sessionStorage, setTimeout: (fn) => setTimeout(fn, 0), clearTimeout,
-    setInterval: () => 0, TextEncoder, crypto, btoa, atob,
+    setInterval: (callback, ms) => { intervals.push(ms); return 0; }, TextEncoder, crypto, btoa, atob,
     PtcgStore: {
       KEY: 'ptcg-tracker-data', read: () => structuredClone(data),
+      cloudProfile: () => ({ version: 1, playerName: data.personal.playerName, playerNameAt: 0,
+        currentDeckId: null, currentDeckAt: 0, watchlist: [], watchlistStamps: {},
+        watchlistTombstones: {}, decks: {}, deckTombstones: {}, deckList: [], deckListTombstones: {} }),
       mergeCloud(records, deleted, playerName) {
         const next = structuredClone(data);
         if (!next.personal.playerName) next.personal.playerName = playerName;
@@ -48,7 +52,7 @@ function browser(responses, initial = {}) {
         return structuredClone(data);
       },
     },
-    loadData() {}, renderPersonalSection() {},
+    loadData() {}, render() {}, renderPersonalSection() {},
     fetch: async (url, options = {}) => {
       calls.push({ path: new URL(url).pathname, method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
       const next = responses.shift();
@@ -64,7 +68,7 @@ function browser(responses, initial = {}) {
     sessionStorage.setItem('ptcg-cloud-session', JSON.stringify({ userId: 'alice', token: 'session' }));
   };
   return {
-    elements, calls, localStorage, sessionStorage, windowListeners, setSession,
+    elements, calls, localStorage, sessionStorage, windowListeners, intervals, setSession,
     read: () => structuredClone(data),
     clickRegister: () => elements.cloudRegisterBtn.listeners.click(),
     clickSync: () => elements.cloudUploadBtn.listeners.click(),
@@ -72,15 +76,19 @@ function browser(responses, initial = {}) {
 }
 
 const emptyCloud = { userId: 'alice', playerName: '', records: [], deleted: [] };
+const savedProfile = { version: 1, playerName: 'Alice', playerNameAt: 0,
+  currentDeckId: null, currentDeckAt: 0, watchlist: [], watchlistStamps: {},
+  watchlistTombstones: {}, decks: {}, deckTombstones: {}, deckList: [], deckListTombstones: {} };
 
 test('registration retries a lost network request, then starts automatic sync', async () => {
   const page = browser([
     new TypeError('Failed to fetch'),
     { status: 201, body: { userId: 'alice', token: 'session' } },
     { status: 200, body: emptyCloud },
+    { status: 200, body: { profile: savedProfile } },
   ]);
   await page.clickRegister();
-  assert.deepEqual(page.calls.map((call) => call.path), ['/api/auth/register', '/api/auth/register', '/api/records']);
+  assert.deepEqual(page.calls.map((call) => call.path), ['/api/auth/register', '/api/auth/register', '/api/records', '/api/profile']);
   assert.equal(JSON.parse(page.sessionStorage.getItem('ptcg-cloud-session')).userId, 'alice');
   assert.equal(page.elements.cloudPasswordInput.value, '');
 });
@@ -91,9 +99,10 @@ test('registration recovers by logging in when first request created the account
     { status: 409, body: { error: '这个用户 ID 已被使用' } },
     { status: 200, body: { userId: 'alice', token: 'recovered' } },
     { status: 200, body: emptyCloud },
+    { status: 200, body: { profile: savedProfile } },
   ]);
   await page.clickRegister();
-  assert.deepEqual(page.calls.map((call) => call.path), ['/api/auth/register', '/api/auth/register', '/api/auth/login', '/api/records']);
+  assert.deepEqual(page.calls.map((call) => call.path), ['/api/auth/register', '/api/auth/register', '/api/auth/login', '/api/records', '/api/profile']);
   assert.equal(JSON.parse(page.sessionStorage.getItem('ptcg-cloud-session')).token, 'recovered');
 });
 
@@ -111,11 +120,12 @@ test('automatic sync uploads local history and merges remote updates', async () 
   const page = browser([
     { status: 200, body: { ...emptyCloud, records: [remote] } },
     { status: 200, body: { created: 1, updated: 0, skipped: 0 } },
+    { status: 200, body: { profile: savedProfile } },
   ], { records: [old] });
   page.setSession();
   await page.clickSync();
   assert.deepEqual(page.read().personal.matchHistory.map((entry) => entry.id).sort(), ['local', 'remote']);
-  assert.deepEqual(page.calls.map((call) => call.path), ['/api/records', '/api/records/upload']);
+  assert.deepEqual(page.calls.map((call) => call.path), ['/api/records', '/api/records/upload', '/api/profile']);
   assert.deepEqual(page.calls[1].body.records.map((entry) => entry.id), ['local']);
 });
 
@@ -123,6 +133,7 @@ test('automatic sync sends deletions and does not resurrect deleted cloud record
   const page = browser([
     { status: 200, body: { ...emptyCloud, records: [{ id: 'gone', updatedAt: 10 }] } },
     { status: 200, body: { created: 1, updated: 0, skipped: 0 } },
+    { status: 200, body: { profile: savedProfile } },
   ], { deleted: { gone: 30 } });
   page.setSession();
   await page.clickSync();
@@ -132,9 +143,10 @@ test('automatic sync sends deletions and does not resurrect deleted cloud record
 });
 
 test('a local history event queues automatic sync', async () => {
-  const page = browser([{ status: 200, body: emptyCloud }]);
+  const page = browser([{ status: 200, body: emptyCloud }, { status: 200, body: { profile: savedProfile } }]);
   page.setSession();
   page.windowListeners['ptcg-history-changed']();
   await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.deepEqual(page.calls.map((call) => call.path), ['/api/records']);
+  assert.deepEqual(page.calls.map((call) => call.path), ['/api/records', '/api/profile']);
+  assert.deepEqual(page.intervals, [600000]);
 });
