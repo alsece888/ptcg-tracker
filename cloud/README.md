@@ -17,7 +17,7 @@
 
 ## 已部署实例
 
-现有 Worker 地址为 `https://ptcg-teable-bridge.cxdalsece.workers.dev`。2026-10-21 已设置两个 secret，线上只读检查通过。网页地址已写入 `cloud-config.js`，仍需发布 GitHub Pages 并做真实账号读写联调。
+现有 Worker 地址为 `https://ptcg-teable-bridge.cxdalsece.workers.dev`。2026-10-21 已设置两个 secret，线上只读检查通过。网页地址已写入 `cloud-config.js`，GitHub Pages 已发布新页面和脚本；仍需用真实账号完成读写联调。
 
 ## 重新部署
 
