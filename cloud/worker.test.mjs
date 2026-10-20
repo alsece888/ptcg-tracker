@@ -128,6 +128,17 @@ test('upload is idempotent, keeps grouped/ambiguous records, and isolates IDs', 
     const update = await api('POST', '/api/records/upload', { userId: 'alice', records: [changed] }, aliceToken);
     assert.equal(update.body.updated, 1);
     assert.equal((await api('GET', '/api/records', undefined, aliceToken)).body.records.find((entry) => entry.id === 'one').result, 'loss');
+    const removal = await api('POST', '/api/records/upload', { userId: 'alice', records: [],
+      deleted: [{ id: 'one', deletedAt: 1792483202000 }] }, aliceToken);
+    assert.deepEqual(removal.body, { created: 1, updated: 0, skipped: 0 });
+    const afterDelete = await api('GET', '/api/records', undefined, aliceToken);
+    assert.equal(afterDelete.body.records.some((entry) => entry.id === 'one'), false);
+    assert.deepEqual(afterDelete.body.deleted, [{ id: 'one', deletedAt: 1792483202000 }]);
+    const stale = await api('POST', '/api/records/upload', { userId: 'alice', records: [changed] }, aliceToken);
+    assert.equal(stale.body.skipped, 1);
+    const repeated = await api('POST', '/api/records/upload', { userId: 'alice', records: [],
+      deleted: [{ id: 'one', deletedAt: 1792483202000 }] }, aliceToken);
+    assert.equal(repeated.body.skipped, 1);
     assert.equal((await api('GET', '/api/records', undefined, aliceToken + 'tampered')).status, 401);
     assert.ok(mock.calls.some((call) => call.method === 'PATCH'));
   } finally { globalThis.fetch = originalFetch; }

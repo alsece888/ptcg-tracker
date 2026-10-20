@@ -223,6 +223,30 @@ function fieldsToEntry(userId, fields) {
   return { entry, playerName: fields['玩家昵称'] || '' };
 }
 
+// 删除标记使用独立记录行，无需在现有 Teable 表增加字段。
+function fieldsToDeletion(userId, fields) {
+  const prefix = `${userId}:deleted:`;
+  const composite = fields['记录ID'];
+  if (typeof composite !== 'string' || !composite.startsWith(prefix)) return null;
+  const id = composite.slice(prefix.length);
+  if (!ENTRY_ID.test(id) || id === 'account') return null;
+  const deletedAt = Date.parse(fields['最后修改时间']);
+  return { id, deletedAt: Number.isFinite(deletedAt) ? deletedAt : 0 };
+}
+
+function deletionToFields(userId, item) {
+  if (!item || !ENTRY_ID.test(item.id || '') || item.id === 'account') {
+    throw new HttpError(400, '存在无效的删除记录 ID');
+  }
+  const deletedAt = parseDate(item.deletedAt);
+  if (!deletedAt) throw new HttpError(400, '删除时间不合法');
+  return {
+    '记录ID': `${userId}:deleted:${item.id}`,
+    '用户ID': userId,
+    '最后修改时间': deletedAt,
+  };
+}
+
 async function readBody(request) {
   const declared = Number(request.headers.get('Content-Length'));
   if (declared > MAX_BODY_BYTES) throw new HttpError(413, '单次上传数据过大');
@@ -288,26 +312,39 @@ export default {
         const userId = await sessionUser(request, env);
         await rateLimit(request, env, userId, false);
         const rows = await recordsForUser(env, userId);
+        const deleted = rows.map((row) => fieldsToDeletion(userId, row.fields)).filter(Boolean);
+        const deletedIds = new Set(deleted.map((item) => item.id));
         const parsed = rows.map((row) => fieldsToEntry(userId, row.fields)).filter(Boolean);
-        return response({ userId, playerName: parsed.find((x) => x.playerName)?.playerName || '', records: parsed.map((x) => x.entry) }, 200, origin);
+        return response({ userId, playerName: parsed.find((x) => x.playerName)?.playerName || '',
+          records: parsed.map((x) => x.entry).filter((entry) => !deletedIds.has(entry.id)), deleted }, 200, origin);
       }
       if (url.pathname === '/api/records/upload' && request.method === 'POST') {
         if (!origin) throw new HttpError(403, '仅允许从本站上传');
         const userId = await sessionUser(request, env);
         const body = await readBody(request);
         if (body.userId && validUserId(body.userId) !== userId) throw new HttpError(403, '不能上传到其他用户 ID');
-        if (!Array.isArray(body.records) || body.records.length > MAX_BATCH) {
-          throw new HttpError(400, `每次只能上传 0–${MAX_BATCH} 条记录`);
+        const deleted = body.deleted || [];
+        if (!Array.isArray(body.records) || !Array.isArray(deleted) || body.records.length + deleted.length > MAX_BATCH) {
+          throw new HttpError(400, `每次只能上传 0–${MAX_BATCH} 条记录或删除标记`);
         }
         await rateLimit(request, env, userId, true);
         const desired = body.records.map((entry) => entryToFields(userId, entry, body.playerName));
-        if (new Set(desired.map((fields) => fields['记录ID'])).size !== desired.length) {
+        const removals = deleted.map((item) => deletionToFields(userId, item));
+        const allIds = [...desired, ...removals].map((fields) => fields['记录ID']);
+        if (new Set(allIds).size !== allIds.length) {
           throw new HttpError(400, '单次上传含重复记录 ID');
+        }
+        if (deleted.some((item) => body.records.some((entry) => entry.id === item.id))) {
+          throw new HttpError(400, '同一条记录不能同时上传和删除');
         }
         const existing = new Map((await recordsForUser(env, userId)).map((row) => [row.fields['记录ID'], row]));
         const creations = [];
         let updated = 0, skipped = 0;
         for (const fields of desired) {
+          const entryId = fields['记录ID'].slice(userId.length + 1);
+          if (existing.has(`${userId}:deleted:${entryId}`) || removals.some((item) => item['记录ID'] === `${userId}:deleted:${entryId}`)) {
+            skipped++; continue;
+          }
           const row = existing.get(fields['记录ID']);
           if (!row) { creations.push({ fields }); continue; }
           const oldStamp = Date.parse(row.fields['最后修改时间']) || 0;
@@ -317,6 +354,10 @@ export default {
             method: 'PATCH', body: JSON.stringify({ record: { fields } }),
           });
           updated++;
+        }
+        for (const fields of removals) {
+          if (existing.has(fields['记录ID'])) { skipped++; continue; }
+          creations.push({ fields });
         }
         if (creations.length) {
           await teable(env, teablePath(env, '/record'), {

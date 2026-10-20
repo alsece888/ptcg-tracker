@@ -3,6 +3,8 @@
   const BOUND_KEY = 'ptcg-cloud-user-id';
   const SESSION_KEY = 'ptcg-cloud-session';
   const BATCH_SIZE = 10;
+  const SYNC_INTERVAL_MS = 30000;
+  const SYNC_DEBOUNCE_MS = 1200;
   const PBKDF2_ITERATIONS = 600000;
   const idInput = document.getElementById('cloudUserIdInput');
   const passwordInput = document.getElementById('cloudPasswordInput');
@@ -15,6 +17,10 @@
   const restoreBtn = document.getElementById('cloudRestoreBtn');
   const buttons = [registerBtn, loginBtn, logoutBtn, uploadBtn, restoreBtn];
   const api = (window.PTCG_CLOUD_API_URL || '').replace(/\/$/, '');
+  let syncTimer = null;
+  let syncPromise = null;
+  let syncAgain = false;
+  let applyingRemote = false;
   if (buttons.some((item) => !item) || !idInput || !passwordInput || !confirmInput || !status) return;
 
   idInput.value = localStorage.getItem(BOUND_KEY) || '';
@@ -37,7 +43,7 @@
     logoutBtn.style.display = active ? '' : 'none';
     registerBtn.style.display = active ? 'none' : '';
     loginBtn.style.display = active ? 'none' : '';
-    if (active) setStatus(`已登录：${session.userId}。可上传本机记录或读取云端记录。`);
+    if (active) setStatus(`已登录：${session.userId}。战绩将自动同步。`);
     else if (!api) setStatus('云端服务尚未配置，当前仍只保存在本机。');
     else setStatus('请注册或登录当前用户 ID。');
     updateAuthUiButtonsOnly();
@@ -143,6 +149,7 @@
     passwordInput.value = '';
     confirmInput.value = '';
     updateAuthUi();
+    await syncRecords();
   }));
 
   loginBtn.addEventListener('click', () => run(async () => {
@@ -160,67 +167,99 @@
     passwordInput.value = '';
     confirmInput.value = '';
     updateAuthUi();
+    await syncRecords();
   }));
 
   logoutBtn.addEventListener('click', () => {
+    clearTimeout(syncTimer);
     sessionStorage.removeItem(SESSION_KEY);
     updateAuthUi();
     setStatus('已退出登录。本机记录仍保留。');
   });
   idInput.addEventListener('input', updateAuthUi);
 
-  uploadBtn.addEventListener('click', () => run(async () => {
-    const id = userId();
-    const data = PtcgStore.read();
-    const records = data?.personal?.matchHistory || [];
-    if (!records.length) throw new Error('这台浏览器还没有对局记录');
-    let created = 0, updated = 0, skipped = 0;
-    for (let offset = 0; offset < records.length; offset += BATCH_SIZE) {
-      setStatus(`上传中：${offset}/${records.length} 条…`);
-      const body = await request('/api/records/upload', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: id, playerName: data.personal.playerName || '', records: records.slice(offset, offset + BATCH_SIZE) }),
-      }, true);
-      created += body.created;
-      updated += body.updated;
-      skipped += body.skipped;
-    }
-    setStatus(`上传完成：新增 ${created}、更新 ${updated}、已存在 ${skipped}，共 ${records.length} 条。`);
-  }));
+  function activeSession() {
+    const session = savedSession();
+    return !!api && !!session?.token && session.userId === idInput.value.trim().toLowerCase();
+  }
 
-  restoreBtn.addEventListener('click', () => run(async () => {
+  function queueSync(delay = SYNC_DEBOUNCE_MS) {
+    if (!activeSession() || applyingRemote) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => { syncRecords().catch((error) => setStatus(error.message || '同步失败', true)); }, delay);
+  }
+
+  async function syncRecords({ pullOnly = false } = {}) {
+    if (!activeSession()) return;
+    if (syncPromise) { syncAgain = true; return syncPromise; }
+    syncPromise = (async () => {
     const id = userId();
-    const local = PtcgStore.read();
-    if (!localStorage.getItem(BOUND_KEY) && (local?.personal?.matchHistory || []).length) {
-      if (!confirm('本机已有对局记录。读取云端后会按记录 ID 合并，不会清空本机记录。确认继续吗？')) return;
-    }
-    setStatus('正在读取云端记录…');
+    setStatus('正在同步云端战绩…');
     const body = await request('/api/records', {}, true);
-    if (body.userId !== id || !Array.isArray(body.records)) throw new Error('云端数据格式有误');
-    let added = 0, refreshed = 0;
-    PtcgStore.mutate((draft) => {
-      const p = draft.personal;
-      if (!p.playerName && body.playerName) p.playerName = body.playerName;
-      const byId = new Map((p.matchHistory || []).map((entry) => [entry.id, entry]));
-      for (const entry of body.records) {
-        if (!entry || !entry.id) continue;
-        if (p.historyTombstones?.[entry.id]) continue;
-        const existing = byId.get(entry.id);
-        if (existing && Number(existing.updatedAt || 0) >= Number(entry.updatedAt || 0)) continue;
-        if (existing) { Object.assign(existing, entry); refreshed++; }
-        else { p.matchHistory.push(entry); byId.set(entry.id, entry); added++; }
-        if (entry.deckId && !p.decks[entry.deckId]) {
-          p.decks[entry.deckId] = { name: entry.deckName || '未命名卡组', accumulatedWins: 0, accumulatedLosses: 0 };
-        }
+    if (body.userId !== id || !Array.isArray(body.records) || !Array.isArray(body.deleted)) throw new Error('云端数据格式有误');
+    const before = PtcgStore.read();
+    applyingRemote = true;
+    let merged;
+    try {
+      merged = PtcgStore.mergeCloud(body.records, body.deleted, body.playerName);
+      if (JSON.stringify(before?.personal || {}) !== JSON.stringify(merged.personal)) {
+        loadData();
+        renderPersonalSection();
+        if (typeof notifyPopupDataUpdated === 'function') notifyPopupDataUpdated();
       }
-      if (!p.currentDeckId && Object.keys(p.decks).length) p.currentDeckId = Object.keys(p.decks)[0];
-      return draft;
-    });
-    loadData();
-    renderPersonalSection();
-    if (typeof notifyPopupDataUpdated === 'function') notifyPopupDataUpdated();
-    setStatus(`云端读取 ${body.records.length} 条；本机新增 ${added}、更新 ${refreshed} 条。`);
-  }));
+    } finally {
+      applyingRemote = false;
+    }
+    let sentRecords = 0, sentDeleted = 0;
+    if (!pullOnly) {
+      const local = PtcgStore.read();
+      const personal = local.personal;
+      const cloudById = new Map(body.records.map((entry) => [entry.id, entry]));
+      const cloudDeleted = new Set(body.deleted.map((item) => item.id));
+      const tombstones = personal.historyTombstones || {};
+      const pendingRecords = (personal.matchHistory || []).filter((entry) =>
+        entry?.id && !tombstones[entry.id] && !cloudDeleted.has(entry.id) &&
+        (!cloudById.has(entry.id) || Number(entry.updatedAt || 0) > Number(cloudById.get(entry.id).updatedAt || 0)));
+      const pendingDeleted = Object.entries(tombstones)
+        .filter(([entryId, stamp]) => entryId && Number(stamp) > 0 && !cloudDeleted.has(entryId))
+        .map(([entryId, stamp]) => ({ id: entryId, deletedAt: Number(stamp) }));
+      const pending = [
+        ...pendingRecords.map((entry) => ({ record: entry })),
+        ...pendingDeleted.map((item) => ({ deleted: item })),
+      ];
+      for (let offset = 0; offset < pending.length; offset += BATCH_SIZE) {
+        const batch = pending.slice(offset, offset + BATCH_SIZE);
+        await request('/api/records/upload', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: id, playerName: personal.playerName || '',
+            records: batch.filter((item) => item.record).map((item) => item.record),
+            deleted: batch.filter((item) => item.deleted).map((item) => item.deleted) }),
+        }, true);
+        sentRecords += batch.filter((item) => item.record).length;
+        sentDeleted += batch.filter((item) => item.deleted).length;
+      }
+    }
+    const at = new Date();
+    setStatus(`已登录：${id}。已自动同步至 ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}；本次读取 ${body.records.length} 条${sentRecords || sentDeleted ? `，发送 ${sentRecords} 条记录、${sentDeleted} 条删除标记` : ''}。`);
+    })();
+    try { return await syncPromise; }
+    finally {
+      syncPromise = null;
+      if (syncAgain) { syncAgain = false; queueSync(); }
+    }
+  }
+
+  uploadBtn.addEventListener('click', () => run(() => syncRecords()));
+  restoreBtn.addEventListener('click', () => run(() => syncRecords({ pullOnly: true })));
+
+  window.addEventListener('ptcg-history-changed', () => queueSync());
+  window.addEventListener('storage', (event) => {
+    if (event.key === PtcgStore.KEY) queueSync();
+  });
+  window.addEventListener('focus', () => queueSync(0));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) queueSync(0); });
+  setInterval(() => { if (!document.hidden) queueSync(0); }, SYNC_INTERVAL_MS);
 
   updateAuthUi();
+  if (activeSession()) queueSync(0);
 })();

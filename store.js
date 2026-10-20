@@ -372,6 +372,17 @@
     }
     pushBackup(prevRaw);
     journalAdd(data.personal.matchHistory || []);
+    // 只通知真正的对局变更；昵称、草稿和排位参考值不应触发云端同步。
+    try {
+      var before = prevRaw ? JSON.parse(prevRaw).personal || {} : {};
+      var after = data.personal || {};
+      if (JSON.stringify(before.matchHistory || []) !== JSON.stringify(after.matchHistory || []) ||
+          JSON.stringify(before.historyTombstones || {}) !== JSON.stringify(after.historyTombstones || {})) {
+        if (typeof dispatchEvent === 'function' && typeof Event === 'function') {
+          dispatchEvent(new Event('ptcg-history-changed'));
+        }
+      }
+    } catch (e) { /* 云端提示不能影响本地保存 */ }
   }
 
   // ---------- 对外 API ----------
@@ -401,6 +412,37 @@
     stampChanges(inc, prevNorm, opts.tombstoneMissing === true, base);
     var merged = merge(base, inc, { authoritative: opts.authoritative !== false });
     write(merged, JSON.stringify(base));
+    return merged;
+  }
+
+  // 云端记录已带有修改时间；保留它，避免每次读取都变成一次新的本机编辑。
+  function mergeCloud(records, deleted, playerName) {
+    var base = read() || normalize({});
+    var remote = normalize({ personal: {
+      playerName: playerName || '', matchHistory: deepCopy(records || []),
+      historyTombstones: {}, decks: {},
+    } });
+    var localById = {};
+    (base.personal.matchHistory || []).forEach(function (entry) { if (entry && entry.id) localById[entry.id] = entry; });
+    (deleted || []).forEach(function (item) {
+      if (!item || !item.id) return;
+      // 云端删除永久胜出，即使另一台设备时钟走快也不复活旧记录。
+      remote.personal.historyTombstones[item.id] = Math.max(Number(item.deletedAt) || 0,
+        stampOf(localById[item.id]) + 1);
+    });
+    remote.personal.matchHistory.forEach(function (entry) {
+      if (entry && entry.deckId && !base.personal.decks[entry.deckId]) {
+        remote.personal.decks[entry.deckId] = {
+          name: entry.deckName || '未命名卡组', accumulatedWins: 0, accumulatedLosses: 0,
+          updatedAt: 0,
+        };
+      }
+    });
+    var merged = merge(base, remote, { authoritative: false });
+    if (!merged.personal.currentDeckId && Object.keys(merged.personal.decks).length) {
+      merged.personal.currentDeckId = Object.keys(merged.personal.decks)[0];
+    }
+    if (JSON.stringify(merged) !== JSON.stringify(base)) write(merged, JSON.stringify(base));
     return merged;
   }
 
@@ -449,6 +491,7 @@
     readRaw: readRaw,
     mutate: mutate,
     applyState: applyState,
+    mergeCloud: mergeCloud,
     recoverHistory: recoverHistory,
     backups: backups,
     stampOf: stampOf,

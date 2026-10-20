@@ -100,7 +100,7 @@
 
         <div class="cloud-module">
           <h3>☁️ 云端战绩</h3>
-          <p>设置用户 ID 和密码后，可上传这台浏览器的对局记录；换电脑时用同一 ID 和密码登录，再读取云端记录。密码不会保存在网页或 Teable 明文中。忘记密码目前无法找回，请妥善保存。</p>
+          <p>登录后自动同步战绩：本机新增、修改或删除的对局会上传；其他电脑的更新会在打开页面时及约 30 秒内读取。离线时先保存在本机，恢复网络后自动重试。密码不会保存在网页或 Teable 明文中。忘记密码目前无法找回，请妥善保存。</p>
           <div class="cloud-controls">
             <input type="text" id="cloudUserIdInput" class="setup-input" placeholder="用户 ID（3–32 位字母、数字、_ 或 -）" maxlength="32" autocomplete="off" spellcheck="false">
             <input type="password" id="cloudPasswordInput" class="setup-input" placeholder="密码（至少 10 位）" minlength="10" maxlength="128" autocomplete="new-password">
@@ -110,8 +110,8 @@
             <button id="cloudLogoutBtn" class="btn btn-ghost" type="button" style="display:none">退出登录</button>
           </div>
           <div class="cloud-controls cloud-record-actions">
-            <button id="cloudUploadBtn" class="btn btn-add" type="button">上传本机记录</button>
-            <button id="cloudRestoreBtn" class="btn btn-ghost" type="button">读取云端记录</button>
+            <button id="cloudUploadBtn" class="btn btn-add" type="button">立即同步</button>
+            <button id="cloudRestoreBtn" class="btn btn-ghost" type="button">仅从云端读取</button>
           </div>
           <div id="cloudStatus" class="cloud-status" role="status" aria-live="polite"></div>
         </div>
@@ -185,7 +185,7 @@
           <!-- 手动记录入口 -->
           <div class="deck-record-row">
             <button id="goRecordBtn" class="btn btn-fetch-data">✍️ 记一局对局</button>
-            <span class="deck-record-hint">在下方「对局历史」顶部选好卡组、对手和先后手，点「胜」或「负」即可记一场。记录只增不减，不会被自动同步改掉</span>
+            <span class="deck-record-hint">在下方「对局历史」顶部选好卡组、对手和先后手，点「胜」或「负」即可记一场。排位参考数据不会自动改动对局记录</span>
           </div>
         </div>
 
@@ -216,7 +216,7 @@
               <button id="clearHistoryBtn" class="btn btn-sm btn-ghost">清空历史</button>
             </div>
           </div>
-          <div class="history-note">记录默认保存在这台浏览器。登录上方的云端战绩模块后，可手动上传或读取；请定期点「导出全部数据」留一份备份。</div>
+          <div class="history-note">记录会先保存在这台浏览器；登录上方的云端战绩模块后自动同步。请定期点「导出全部数据」留一份备份。</div>
           <div id="historyList" class="history-list"></div>
           <div id="historyEmpty" class="empty-state" style="padding:30px;">
             <div class="empty-icon">📝</div>
@@ -414,9 +414,9 @@
     </div>
   </div>
 
-  <script src="store.js?v=1"></script>
+  <script src="store.js?v=2"></script>
   <script src="app.js?v=19"></script>
   <script src="cloud-config.js?v=2"></script>
-  <script src="cloud.js?v=3"></script>
+  <script src="cloud.js?v=4"></script>
 </body>
 </html>
