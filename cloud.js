@@ -78,12 +78,20 @@
       if (!session?.token || session.userId !== idInput.value.trim().toLowerCase()) throw new Error('请先登录当前用户 ID');
       headers.Authorization = `Bearer ${session.token}`;
     }
-    const res = await fetch(api + path, { ...options, headers });
+    let res;
+    try { res = await fetch(api + path, { ...options, headers }); }
+    catch {
+      const error = new Error('无法连接云端服务，请检查网络或浏览器拦截设置后重试。');
+      error.code = 'NETWORK';
+      throw error;
+    }
     let body;
     try { body = await res.json(); } catch { throw new Error(`服务返回错误（HTTP ${res.status}）`); }
     if (!res.ok) {
       if (res.status === 401 && authenticated) { sessionStorage.removeItem(SESSION_KEY); updateAuthUi(); }
-      throw new Error(body.error || `服务返回错误（HTTP ${res.status}）`);
+      const error = new Error(body.error || `服务返回错误（HTTP ${res.status}）`);
+      error.status = res.status;
+      throw error;
     }
     return body;
   }
@@ -111,10 +119,25 @@
     setStatus('正在处理密码并注册…');
     const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
     const proof = await passwordProof(password, salt);
-    const body = await request('/api/auth/register', {
+    const registerOptions = {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: id, salt, proof }),
-    });
+    };
+    let body;
+    try { body = await request('/api/auth/register', registerOptions); }
+    catch (error) {
+      if (error.code !== 'NETWORK') throw error;
+      setStatus('连接中断，正在确认账号是否已创建…');
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      try { body = await request('/api/auth/register', registerOptions); }
+      catch (retryError) {
+        if (retryError.status !== 409) throw retryError;
+        body = await request('/api/auth/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: id, proof }),
+        });
+      }
+    }
     sessionStorage.setItem(SESSION_KEY, JSON.stringify({ userId: body.userId, token: body.token }));
     localStorage.setItem(BOUND_KEY, body.userId);
     passwordInput.value = '';

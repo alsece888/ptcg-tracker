@@ -1,6 +1,7 @@
 cloud/.dev.vars*
 cloud/.env*
 cloud/.wrangler/
+cloud/pages-proxy/.wrangler/
 cloud/node_modules/
 *teable-token*.txt
 .workbuddy/

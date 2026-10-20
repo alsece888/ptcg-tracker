@@ -17,7 +17,9 @@
 
 ## 已部署实例
 
-现有 Worker 地址为 `https://ptcg-teable-bridge.cxdalsece.workers.dev`。2026-10-21 已设置两个 secret，线上只读检查通过。网页地址已写入 `cloud-config.js`，GitHub Pages 已发布新页面和脚本；仍需用真实账号完成读写联调。
+现有 Worker 地址为 `https://ptcg-teable-bridge.cxdalsece.workers.dev`。2026-10-21 已设置两个 secret，线上只读检查通过。网页地址已写入 `cloud-config.js`，GitHub Pages 已发布新页面和脚本。
+
+有用户报告另一台电脑无法打开 `workers.dev` 地址。为此增加了 [Pages 转发入口](pages-proxy/) `https://ptcg-sync-gateway.pages.dev`，它通过 Cloudflare Service binding 调用现有 Worker，已验证账号查询和 CORS 正常。用户已确认另一台电脑能打开这个地址；网页的 `cloud-config.js` 已切到 Pages 入口，因此无须更改 DNS。主站仍由 GitHub Pages 托管。
 
 ## 重新部署
 
