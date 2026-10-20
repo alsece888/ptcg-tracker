@@ -3127,17 +3127,26 @@ body { background: radial-gradient(circle at 90% 0%, var(--primary-dim), transpa
 }
 .module-title small { font-size: 12px; color: var(--text-muted); font-weight: 500; letter-spacing: 0; margin-left: auto; }
 .module-number { font: 700 13px var(--mono); color: var(--primary); letter-spacing: 0; }
+.account-section { margin-bottom: 38px; }
+.account-card { border-top: 4px solid var(--accent); padding: 22px 24px; }
+.account-card .cloud-module {
+  margin: 0; padding: 0 0 19px; border: 0; border-bottom: 1px solid var(--border);
+  border-radius: 0; background: transparent; box-shadow: none;
+}
+.account-card .personal-setup { margin: 0; padding-top: 19px; }
+.account-subtitle { font-size: 17px; margin-bottom: 5px; }
+.account-card .section-desc { margin-bottom: 12px; }
 .personal-section { gap: 15px; margin-bottom: 38px; }
 .personal-section.has-player #personalDeckPanel { order: 0; }
-.personal-section.has-player #personalHistory { order: 1; }
-.personal-section.has-player > .personal-card { order: 2; }
+.personal-section.has-player #personalApiOverview { order: 1; }
+.personal-section.has-player #personalHistory { order: 2; }
 .personal-section.has-player #apiHint { order: 3; }
-.personal-section.has-player > .cloud-module { order: 4; }
-.personal-section > .personal-card { padding: 18px 22px; }
-.personal-section > .personal-card .section-title { font-size: 17px; }
-.personal-section > .personal-card .section-desc { margin-bottom: 12px; }
-.personal-setup { margin-bottom: 0; }
-.personal-api-overview { margin-top: 13px; padding: 12px 16px; background: var(--bg-input); }
+.personal-empty-intro {
+  padding: 20px 24px; border: 1px dashed var(--border); border-radius: var(--radius);
+  color: var(--text-dim); background: var(--bg-card); font-size: 14px;
+}
+.personal-section.has-player .personal-empty-intro { display: none; }
+.personal-api-overview { margin-top: 0; padding: 12px 16px; background: var(--bg-card); box-shadow: var(--shadow); }
 .personal-api-overview::before { content: '排位参考'; align-self: center; font-size: 12px; color: var(--text-muted); font-weight: 700; margin-right: 4px; }
 .deck-current-section { border-top: 4px solid var(--primary); padding: 22px 24px; }
 .deck-selector-row { margin-bottom: 14px; }
@@ -3148,10 +3157,6 @@ body { background: radial-gradient(circle at 90% 0%, var(--primary-dim), transpa
 .personal-history .personal-card { padding: 22px 24px; }
 .history-header h3 { font-size: 18px; }
 .history-note { margin: 8px 0 15px; }
-.cloud-module {
-  margin-top: 0; padding: 20px 22px; border-left: 4px solid var(--accent);
-  background: var(--bg-card); box-shadow: var(--shadow);
-}
 .cloud-module h3 { font-size: 17px; margin-bottom: 5px; }
 .cloud-module p { max-width: 95ch; line-height: 1.65; }
 .cloud-controls input { max-width: 250px; }
@@ -3169,7 +3174,8 @@ button:focus-visible { outline: 3px solid var(--info); outline-offset: 2px; }
   .update-info { margin-right: auto; }
   .module-title { font-size: 21px; margin-top: 26px; }
   .module-title small { display: none; }
-  .personal-section > .personal-card, .deck-current-section,
-  .personal-history .personal-card, .cloud-module { padding: 16px; }
+  .account-card, .deck-current-section, .personal-history .personal-card { padding: 16px; }
+  .account-card .cloud-module { padding: 0 0 16px; }
+  .account-card .personal-setup { padding-top: 16px; }
   .cloud-controls input { max-width: none; flex-basis: 100%; }
 }

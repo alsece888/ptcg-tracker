@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PTCG 玩家追踪器</title>
   <meta name="description" content="宝可梦卡牌小天冠山排位赛玩家数据追踪工具">
-  <link rel="stylesheet" href="style.css?v=18">
+  <link rel="stylesheet" href="style.css?v=19">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <script>
   var _hmt = _hmt || [];
@@ -68,20 +68,37 @@
     </div>
 
     <nav class="section-nav" aria-label="页面导航">
-      <a href="#personalSection">01 我的战绩</a>
-      <a href="#watchlistSection">02 关注玩家</a>
-      <a href="#deckListManageSection">03 卡组图鉴</a>
+      <a href="#accountSection">01 云端与资料</a>
+      <a href="#personalSection">02 我的战绩</a>
+      <a href="#watchlistSection">03 关注玩家</a>
+      <a href="#deckListManageSection">04 卡组图鉴</a>
     </nav>
 
-    <!-- 第一大模块：个人战绩 / 卡组 / 对局历史 -->
-    <h2 class="module-title"><span class="module-number">01</span> 我的战绩 <small>记录每一局，回看卡组表现</small></h2>
-    <section class="personal-section" id="personalSection">
-      <div class="personal-card">
-        <h2 class="section-title">玩家资料</h2>
-        <p class="section-desc">填写游戏昵称并选择自己的卡组，就可以开始记录对局。</p>
+    <!-- 第一大模块：云端账号与玩家资料 -->
+    <h2 class="module-title"><span class="module-number">01</span> 云端同步与玩家资料 <small>一个账号，在不同设备接续战绩</small></h2>
+    <section class="account-section" id="accountSection">
+      <div class="personal-card account-card">
+        <div class="cloud-module">
+          <h3>☁️ 云端账号</h3>
+          <p>登录后，对局、我的卡组、关注玩家 ID 和卡组图鉴会自动同步。本机修改会尽快上传；页面保持打开时，每 10 分钟检查云端更新。离线时先存本机。请妥善保管密码，目前无法找回。</p>
+          <div class="cloud-controls">
+            <input type="text" id="cloudUserIdInput" class="setup-input" placeholder="用户 ID（3–32 位）" maxlength="32" autocomplete="off" spellcheck="false">
+            <input type="password" id="cloudPasswordInput" class="setup-input" placeholder="密码（至少 10 位）" minlength="10" maxlength="128" autocomplete="new-password">
+            <input type="password" id="cloudPasswordConfirmInput" class="setup-input" placeholder="注册时再次输入密码" minlength="10" maxlength="128" autocomplete="new-password">
+            <button id="cloudRegisterBtn" class="btn btn-ghost" type="button">注册 ID</button>
+            <button id="cloudLoginBtn" class="btn btn-ghost" type="button">登录</button>
+            <button id="cloudLogoutBtn" class="btn btn-ghost" type="button" style="display:none">退出登录</button>
+          </div>
+          <div class="cloud-controls cloud-record-actions">
+            <button id="cloudUploadBtn" class="btn btn-add" type="button">立即同步</button>
+          </div>
+          <div id="cloudStatus" class="cloud-status" role="status" aria-live="polite"></div>
+        </div>
 
         <!-- 第一步：设置玩家昵称 -->
         <div class="personal-setup">
+          <h3 class="account-subtitle">玩家资料</h3>
+          <p class="section-desc">填写游戏昵称并选择自己的卡组，就可以开始记录对局。</p>
           <label class="setup-label">你的游戏昵称</label>
           <div class="setup-input-group">
             <input type="text" id="personalPlayerInput" class="setup-input" placeholder="输入你的 PTCG 游戏昵称..." maxlength="50">
@@ -90,18 +107,13 @@
           <div id="personalSetupMsg" class="add-result"></div>
         </div>
 
-        <!-- API 总体数据（只读参考：不再据此自动记账） -->
-        <div id="personalApiOverview" class="personal-api-overview">
-          <div class="api-stat"><span class="api-stat-label">排名</span><span class="api-stat-value" id="apiRank">--</span></div>
-          <div class="api-stat"><span class="api-stat-label">积分</span><span class="api-stat-value" id="apiExp">--</span></div>
-          <div class="api-stat"><span class="api-stat-label">总胜场</span><span class="api-stat-value win" id="apiTotalWin">--</span></div>
-          <div class="api-stat"><span class="api-stat-label">总败场</span><span class="api-stat-value lose" id="apiTotalLose">--</span></div>
-          <div class="api-stat"><span class="api-stat-label">总胜率</span><span class="api-stat-value" id="apiWinRate">--</span></div>
-          <div class="api-stat"><span class="api-stat-label">总场数</span><span class="api-stat-value" id="apiTotalGames">--</span></div>
-          <button id="personalRefreshApiBtn" class="btn btn-sm btn-ghost" title="从排位 API 拉一次当前数据（只读，不会写进对局历史）">🔄 刷新排位数据</button>
-          <span id="personalAutoStatus" class="personal-auto-status"></span>
-        </div>
       </div>
+    </section>
+
+    <!-- 第二大模块：个人战绩 / 卡组 / 对局历史 -->
+    <h2 class="module-title"><span class="module-number">02</span> 我的战绩 <small>记录每一局，回看卡组表现</small></h2>
+    <section class="personal-section" id="personalSection">
+      <div class="personal-empty-intro">先在上方填写游戏昵称，再选择卡组，就可以在这里记录并查看战绩。</div>
       <div id="apiHint" class="api-hint" style="display:none;"></div>
 
       <!-- 第二步：卡组管理 + 战绩获取 -->
@@ -177,6 +189,17 @@
         </div>
 
       </div>
+      <!-- API 总体数据（只读参考：不再据此自动记账） -->
+      <div id="personalApiOverview" class="personal-api-overview">
+        <div class="api-stat"><span class="api-stat-label">排名</span><span class="api-stat-value" id="apiRank">--</span></div>
+        <div class="api-stat"><span class="api-stat-label">积分</span><span class="api-stat-value" id="apiExp">--</span></div>
+        <div class="api-stat"><span class="api-stat-label">总胜场</span><span class="api-stat-value win" id="apiTotalWin">--</span></div>
+        <div class="api-stat"><span class="api-stat-label">总败场</span><span class="api-stat-value lose" id="apiTotalLose">--</span></div>
+        <div class="api-stat"><span class="api-stat-label">总胜率</span><span class="api-stat-value" id="apiWinRate">--</span></div>
+        <div class="api-stat"><span class="api-stat-label">总场数</span><span class="api-stat-value" id="apiTotalGames">--</span></div>
+        <button id="personalRefreshApiBtn" class="btn btn-sm btn-ghost" title="从排位 API 拉一次当前数据（只读，不会写进对局历史）">🔄 刷新排位数据</button>
+        <span id="personalAutoStatus" class="personal-auto-status"></span>
+      </div>
 
       <!-- 第三步：对局历史 -->
       <div id="personalHistory" class="personal-history" style="display:none;">
@@ -196,27 +219,10 @@
           </div>
         </div>
       </div>
-        <div class="cloud-module">
-          <h3>☁️ 云端同步</h3>
-          <p>对局、我的卡组、关注玩家 ID 和卡组图鉴都会同步。保存后自动上传；页面打开时每 10 分钟检查更新，切回页面也会检查。离线时先存本机。请妥善保管密码，目前无法找回。</p>
-          <div class="cloud-controls">
-            <input type="text" id="cloudUserIdInput" class="setup-input" placeholder="用户 ID（3–32 位）" maxlength="32" autocomplete="off" spellcheck="false">
-            <input type="password" id="cloudPasswordInput" class="setup-input" placeholder="密码（至少 10 位）" minlength="10" maxlength="128" autocomplete="new-password">
-            <input type="password" id="cloudPasswordConfirmInput" class="setup-input" placeholder="注册时再次输入密码" minlength="10" maxlength="128" autocomplete="new-password">
-            <button id="cloudRegisterBtn" class="btn btn-ghost" type="button">注册 ID</button>
-            <button id="cloudLoginBtn" class="btn btn-ghost" type="button">登录</button>
-            <button id="cloudLogoutBtn" class="btn btn-ghost" type="button" style="display:none">退出登录</button>
-          </div>
-          <div class="cloud-controls cloud-record-actions">
-            <button id="cloudUploadBtn" class="btn btn-add" type="button">立即同步</button>
-          </div>
-          <div id="cloudStatus" class="cloud-status" role="status" aria-live="polite"></div>
-        </div>
-
     </section>
 
-    <!-- 第二大模块：添加关注玩家 -->
-    <h2 class="module-title"><span class="module-number">02</span> 关注玩家 <small>查看排位表现与变化</small></h2>
+    <!-- 第三大模块：添加关注玩家 -->
+    <h2 class="module-title"><span class="module-number">03</span> 关注玩家 <small>查看排位表现与变化</small></h2>
     <section class="add-section" id="watchlistSection">
       <div class="add-card">
         <h2 class="section-title">添加关注玩家</h2>
@@ -304,7 +310,7 @@
     </section>
 
     <!-- 卡组图鉴（页面底部） -->
-    <h2 class="module-title"><span class="module-number">03</span> 卡组图鉴 <small>管理对局中的对手卡组</small></h2>
+    <h2 class="module-title"><span class="module-number">04</span> 卡组图鉴 <small>管理对局中的对手卡组</small></h2>
     <section class="deck-list-manage-section" id="deckListManageSection">
       <div id="deckListManagePanel" class="deck-list-manage-panel">
         <div class="deck-list-manage-header">
@@ -384,6 +390,6 @@
   <script src="store.js?v=4"></script>
   <script src="app.js?v=20"></script>
   <script src="cloud-config.js?v=2"></script>
-  <script src="cloud.js?v=5"></script>
+  <script src="cloud.js?v=6"></script>
 </body>
 </html>

@@ -24,12 +24,15 @@ function browser(responses, initial = {}) {
   const calls = [];
   const windowListeners = {};
   const intervals = [];
+  const intervalCallbacks = [];
+  const documentListeners = {};
+  const document = { hidden: false, getElementById: (id) => elements[id], addEventListener(name, callback) { documentListeners[name] = callback; } };
   let data = { personal: { playerName: 'Alice', matchHistory: initial.records || [], historyTombstones: initial.deleted || {} } };
   const context = {
     window: { PTCG_CLOUD_API_URL: 'https://bridge.example', addEventListener(name, callback) { windowListeners[name] = callback; } },
-    document: { hidden: false, getElementById: (id) => elements[id], addEventListener() {} },
+    document,
     localStorage, sessionStorage, setTimeout: (fn) => setTimeout(fn, 0), clearTimeout,
-    setInterval: (callback, ms) => { intervals.push(ms); return 0; }, TextEncoder, crypto, btoa, atob,
+    setInterval: (callback, ms) => { intervals.push(ms); intervalCallbacks.push(callback); return 0; }, TextEncoder, crypto, btoa, atob,
     PtcgStore: {
       KEY: 'ptcg-tracker-data', read: () => structuredClone(data),
       cloudProfile: () => ({ version: 1, playerName: data.personal.playerName, playerNameAt: 0,
@@ -68,7 +71,7 @@ function browser(responses, initial = {}) {
     sessionStorage.setItem('ptcg-cloud-session', JSON.stringify({ userId: 'alice', token: 'session' }));
   };
   return {
-    elements, calls, localStorage, sessionStorage, windowListeners, intervals, setSession,
+    elements, calls, localStorage, sessionStorage, windowListeners, documentListeners, document, intervals, intervalCallbacks, setSession,
     read: () => structuredClone(data),
     clickRegister: () => elements.cloudRegisterBtn.listeners.click(),
     clickSync: () => elements.cloudUploadBtn.listeners.click(),
@@ -149,4 +152,16 @@ test('a local history event queues automatic sync', async () => {
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.deepEqual(page.calls.map((call) => call.path), ['/api/records', '/api/profile']);
   assert.deepEqual(page.intervals, [600000]);
+});
+
+test('ten-minute polling also runs in a background tab without a focus-triggered check', async () => {
+  const page = browser([{ status: 200, body: emptyCloud }, { status: 200, body: { profile: savedProfile } }]);
+  page.setSession();
+  assert.equal(page.windowListeners.focus, undefined);
+  assert.equal(page.documentListeners.visibilitychange, undefined);
+  assert.deepEqual(page.intervals, [600000]);
+  page.document.hidden = true;
+  page.intervalCallbacks[0]();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(page.calls.map((call) => call.path), ['/api/records', '/api/profile']);
 });

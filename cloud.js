@@ -280,9 +280,7 @@
   window.addEventListener('storage', (event) => {
     if (event.key === PtcgStore.KEY) queueSync();
   });
-  window.addEventListener('focus', () => queueSync(0));
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) queueSync(0); });
-  setInterval(() => { if (!document.hidden) queueSync(0); }, SYNC_INTERVAL_MS);
+  setInterval(() => queueSync(0), SYNC_INTERVAL_MS);
 
   updateAuthUi();
   if (activeSession()) queueSync(0);
