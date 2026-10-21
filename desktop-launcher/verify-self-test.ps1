@@ -10,6 +10,7 @@ $checks = [ordered]@{
     'Modes preserve page and session' = ($report.detailWidth -eq 400 -and $report.detailMode -eq '"detail"' -and $report.homeMode -eq '"home"' -and $report.sameDocumentAndSession -eq 'true')
     'No clipped compact content' = ($report.contentHeight -le $report.panelHeight)
     'No false background-page closed warning' = ($report.backgroundStatus -eq '"主页在后台运行"')
+    'Continuous panel without floating title row' = ($report.toolbarHeight -eq 0 -and $report.bottomAlpha -ge 229 -and $report.panelAlpha -ge 229 -and $report.bodyBackgroundIsTransparent -eq 'true')
 }
 foreach ($check in $checks.GetEnumerator()) {
     Write-Output "$(if ($check.Value) { 'PASS' } else { 'FAIL' }): $($check.Key)"

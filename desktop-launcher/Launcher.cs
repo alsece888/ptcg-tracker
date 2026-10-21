@@ -24,13 +24,19 @@ namespace MaloTCG
         readonly Button modeButton;
         readonly Button pinButton;
         readonly Border toolbar;
+        readonly Border shell;
+        readonly RowDefinition toolbarRow;
+        readonly Button floatingMenu;
+        readonly TextBlock floatingDrag;
+        readonly System.Collections.Generic.List<Button> buttons = new System.Collections.Generic.List<Button>();
         readonly bool demo;
         readonly bool selfTest;
         string mode = "home";
         bool ready;
         bool closing;
         bool testing;
-        double surface = 0.72;
+        double surface = 0.90;
+        bool dark;
         Rect homeBounds;
         Point floatPosition = new Point(double.NaN, double.NaN);
 
@@ -61,7 +67,8 @@ namespace MaloTCG
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             UseLayoutRounding = true;
             var grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
+            toolbarRow = new RowDefinition { Height = new GridLength(28) };
+            grid.RowDefinitions.Add(toolbarRow);
             grid.RowDefinitions.Add(new RowDefinition());
             toolbar = new Border { Background = new SolidColorBrush(Color.FromArgb(225, 237, 243, 239)), CornerRadius = new CornerRadius(8, 8, 0, 0) };
             var strip = new DockPanel { LastChildFill = true };
@@ -91,7 +98,23 @@ namespace MaloTCG
             web.Visibility = Visibility.Hidden;
             content.Children.Add(web);
             grid.Children.Add(content);
-            Content = grid;
+            floatingMenu = MakeButton("⋯", "窗口操作：主页、展开、置顶与透明度", ShowMenu);
+            floatingMenu.HorizontalAlignment = HorizontalAlignment.Right;
+            floatingMenu.VerticalAlignment = VerticalAlignment.Top;
+            floatingMenu.Margin = new Thickness(0, 4, 4, 0);
+            floatingMenu.Height = 24;
+            floatingMenu.Visibility = Visibility.Collapsed;
+            Grid.SetRow(floatingMenu, 1);
+            Panel.SetZIndex(floatingMenu, 10);
+            grid.Children.Add(floatingMenu);
+            floatingDrag = new TextBlock { Text = "⠿", Width = 16, Height = 24, FontSize = 15, Foreground = Brushes.DimGray, Cursor = Cursors.SizeAll, ToolTip = "按住拖动", Background = Brushes.Transparent, Margin = new Thickness(6, 5, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Visibility = Visibility.Collapsed };
+            floatingDrag.MouseLeftButtonDown += (s, e) => DragMove();
+            Grid.SetRow(floatingDrag, 1);
+            Panel.SetZIndex(floatingDrag, 10);
+            grid.Children.Add(floatingDrag);
+            shell = new Border { CornerRadius = new CornerRadius(10), Child = grid };
+            Content = shell;
+            PaintShell();
             Loaded += async (s, e) => await Initialize();
             Closed += (s, e) => { closing = true; web.Dispose(); };
             PreviewKeyDown += async (s, e) => {
@@ -104,6 +127,7 @@ namespace MaloTCG
         {
             var button = new Button { Content = label, ToolTip = tip, FontSize = 11, Padding = new Thickness(6, 2, 6, 2), MinWidth = 24, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Foreground = Brushes.DarkSlateGray, Cursor = Cursors.Hand, Focusable = true };
             button.Click += (s, e) => action();
+            buttons.Add(button);
             return button;
         }
 
@@ -145,6 +169,7 @@ namespace MaloTCG
                             if (selfTest && !testing) { testing = true; await SelfTest(); }
                         }
                         if ((string)command == "mode" && message.ContainsKey("mode")) await SetMode(Convert.ToString(message["mode"]));
+                        if ((string)command == "theme" && message.ContainsKey("theme")) { dark = Convert.ToString(message["theme"]) == "dark"; PaintShell(); }
                     } catch (Exception ex) { Debug.WriteLine(ex.Message); }
                 };
                 if (demo) await core.AddScriptToExecuteOnDocumentCreatedAsync(ReadResource("DemoSeed"));
@@ -204,8 +229,23 @@ namespace MaloTCG
             Top = Math.Max(work.Top, Math.Min(Top, work.Bottom - Height));
             modeButton.Content = mode == "mini" ? "展开" : "悬浮";
             pinButton.Foreground = Topmost ? Brushes.SeaGreen : Brushes.DimGray;
-            toolbar.Background = new SolidColorBrush(Color.FromArgb(mode == "home" ? (byte)245 : (byte)(255 * surface), 237, 243, 239));
+            PaintShell();
             await ApplyWebMode();
+        }
+
+        void PaintShell()
+        {
+            bool home = mode == "home";
+            toolbarRow.Height = new GridLength(home ? 28 : 0);
+            toolbar.Visibility = home ? Visibility.Visible : Visibility.Collapsed;
+            toolbar.Background = Brushes.Transparent;
+            floatingMenu.Visibility = home ? Visibility.Collapsed : Visibility.Visible;
+            floatingDrag.Visibility = home ? Visibility.Collapsed : Visibility.Visible;
+            byte alpha = home ? (byte)255 : (byte)Math.Round(255 * surface);
+            shell.Background = new SolidColorBrush(dark ? Color.FromArgb(alpha, 23, 32, 41) : Color.FromArgb(alpha, 250, 252, 251));
+            foreach (var button in buttons) button.Foreground = dark ? Brushes.WhiteSmoke : Brushes.DarkSlateGray;
+            pinButton.Foreground = Topmost ? Brushes.SeaGreen : (dark ? Brushes.LightGray : Brushes.DimGray);
+            floatingDrag.Foreground = dark ? Brushes.LightGray : Brushes.DimGray;
         }
 
         async Task ApplyWebMode()
@@ -222,10 +262,20 @@ namespace MaloTCG
         void ShowMenu()
         {
             var menu = new ContextMenu();
-            foreach (var value in new[] { 0.45, 0.72, 1.0 }) {
+            var homeItem = new MenuItem { Header = "回到主页（Esc）" };
+            homeItem.Click += async (s, e) => await SetMode("home");
+            menu.Items.Add(homeItem);
+            var viewItem = new MenuItem { Header = mode == "mini" ? "展开详细版" : "切换微缩版" };
+            viewItem.Click += async (s, e) => await SetMode(mode == "mini" ? "detail" : "mini");
+            menu.Items.Add(viewItem);
+            var pinItem = new MenuItem { Header = "窗口置顶", IsCheckable = true, IsChecked = Topmost };
+            pinItem.Click += (s, e) => { Topmost = !Topmost; PaintShell(); };
+            menu.Items.Add(pinItem);
+            menu.Items.Add(new Separator());
+            foreach (var value in new[] { 0.72, 0.90, 1.0 }) {
                 var opacity = value;
                 var item = new MenuItem { Header = "面板不透明度 " + (int)(value * 100) + "%", IsCheckable = true, IsChecked = Math.Abs(surface - value) < 0.01 };
-                item.Click += async (s, e) => { surface = opacity; toolbar.Background = new SolidColorBrush(Color.FromArgb(mode == "home" ? (byte)245 : (byte)(255 * surface), 237, 243, 239)); await ApplyWebMode(); };
+                item.Click += async (s, e) => { surface = opacity; PaintShell(); await ApplyWebMode(); };
                 menu.Items.Add(item);
             }
             menu.Items.Add(new Separator());
@@ -235,6 +285,9 @@ namespace MaloTCG
             var minimize = new MenuItem { Header = "最小化" };
             minimize.Click += (s, e) => WindowState = WindowState.Minimized;
             menu.Items.Add(minimize);
+            var close = new MenuItem { Header = "关闭启动器" };
+            close.Click += (s, e) => Close();
+            menu.Items.Add(close);
             menu.IsOpen = true;
         }
 
@@ -278,6 +331,9 @@ namespace MaloTCG
                 report["minimumAlpha"] = Enumerable.Range(0, pixels.Length / 4).Min(i => pixels[i * 4 + 3]);
                 report["hasSemitransparentPixels"] = Enumerable.Range(0, pixels.Length / 4).Any(i => pixels[i * 4 + 3] > 0 && pixels[i * 4 + 3] < 255);
                 report["panelAlpha"] = pixels[(50 * (int)ActualWidth + 100) * 4 + 3];
+                report["bottomAlpha"] = pixels[((int)ActualHeight - 5) * (int)ActualWidth * 4 + 100 * 4 + 3];
+                report["toolbarHeight"] = toolbarRow.ActualHeight;
+                report["bodyBackgroundIsTransparent"] = await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.getElementById('ptcg-desktop-panel').contentDocument.querySelector('.quick-record')).backgroundColor==='rgba(0, 0, 0, 0)'");
                 var encoder = new PngBitmapEncoder();
                 encoder.Frames.Add(BitmapFrame.Create(image));
                 using (var file = File.Create(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "desktop-preview.png"))) encoder.Save(file);

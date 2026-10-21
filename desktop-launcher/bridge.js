@@ -4,7 +4,7 @@
   if (window.top !== window || !window.chrome?.webview) return;
   if (!['/', '/index.html'].includes(location.pathname)) return;
   let mode = 'home';
-  let surface = 0.72;
+  let surface = 0.90;
   let panel;
   const send = (command, extra = {}) => chrome.webview.postMessage({ command, ...extra });
   function stylePanel() {
@@ -18,11 +18,14 @@
     }
     style.textContent = `
       html, body { background: transparent !important; }
+      .glass-panel { background: transparent !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; box-shadow: none !important; border: none !important; }
       :root, [data-theme="light"] { --popup-surface: rgba(255,255,255,${surface}); }
       [data-theme="dark"] { --popup-surface: rgba(23,32,41,${surface}); }
       .p-header { display: none !important; }
-      body[data-mode="mini"] .content-layer { min-height: 0; height: 100vh; padding: 4px; gap: 4px; }
-      body[data-mode="mini"] .quick-record { justify-content: flex-start; gap: 6px; }
+      .deck-row { padding-right: 30px; padding-left: 22px; }
+      body[data-mode="mini"] .content-layer { min-height: 0; height: 100vh; padding: 8px; gap: 8px; }
+      body[data-mode="mini"] .deck-row { padding: 0 26px 4px 18px; }
+      body[data-mode="mini"] .quick-record { justify-content: center; gap: 8px; padding: 0; }
       body[data-mode="mini"] .qr-row + .qr-row { margin-top: 0; }
     `;
     const theme = localStorage.getItem('ptcg-theme') || 'light';
@@ -58,7 +61,7 @@
   }
   window.PtcgDesktop = Object.freeze({
     setMode,
-    setSurface(value) { surface = Math.min(1, Math.max(0.35, Number(value) || 0.72)); stylePanel(); },
+    setSurface(value) { surface = Math.min(1, Math.max(0.35, Number(value) || 0.90)); stylePanel(); },
     getMode: () => mode,
   });
   document.addEventListener('DOMContentLoaded', () => {
@@ -73,6 +76,9 @@
       html[data-desktop-mode="detail"] #ptcg-desktop-panel { display: block; }
     `;
     document.head.append(style);
+    const notifyTheme = () => send('theme', { theme: document.documentElement.dataset.theme || localStorage.getItem('ptcg-theme') || 'light' });
+    new MutationObserver(notifyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    notifyTheme();
     panel = document.createElement('iframe');
     panel.id = 'ptcg-desktop-panel';
     panel.title = '桌面悬浮记录面板';
