@@ -2558,13 +2558,16 @@ $('popupBtn').addEventListener('click', async () => {
 
   // 每次用时间戳参数，彻底绕过浏览器缓存
   const popupUrl = 'popup.html?v=' + Date.now();
+  const miniPopup = localStorage.getItem('ptcg-popup-mode') !== 'detail';
+  const popupWidth = miniPopup ? 200 : 400;
+  const popupHeight = miniPopup ? 200 : 620;
 
   // 优先：Document Picture-in-Picture API — 始终置顶于所有窗口之上
   if ('documentPictureInPicture' in window) {
     try {
       const pipWindow = await documentPictureInPicture.requestWindow({
-        width: 400,
-        height: 620,
+        width: popupWidth,
+        height: popupHeight,
       });
 
       // 将 popup.html 内容写入 PiP 窗口
@@ -2594,7 +2597,7 @@ $('popupBtn').addEventListener('click', async () => {
 
   // 回退：普通浏览器窗口（不置顶）
   popupWindow = window.open(popupUrl, 'ptcg-popup',
-    'width=400,height=620,left=' + (screen.width - 420) + ',top=100');
+    'width=' + popupWidth + ',height=' + popupHeight + ',left=' + (screen.width - popupWidth - 20) + ',top=100');
   if (popupWindow) {
     const checkClosed = setInterval(() => {
       if (popupWindow.closed) { popupWindow = null; clearInterval(checkClosed); }

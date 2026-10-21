@@ -607,10 +607,41 @@ body { background: var(--popup-bg); }
 .api-mini { order: 5; }
 .p-status { order: 6; }
 button:focus-visible, select:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+
+/* Floating desk: compact controls share the detailed view's live state. */
+:root, [data-theme="light"] { --popup-bg: #edf1ef; --popup-surface: rgba(255,255,255,.76); }
+[data-theme="dark"] { --popup-bg: #172029; --popup-surface: rgba(30,40,50,.76); }
+html { background: var(--popup-bg); }
+body { min-width: 200px; background: transparent; }
+.glass-panel { background: var(--popup-surface); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 0; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+.p-header { background: transparent; box-shadow: none; padding: 4px 8px; }
+.p-header-actions { display: flex; align-items: center; gap: 8px; }
+.mode-toggle { border: 0; border-radius: 8px; padding: 6px 8px; background: var(--glass-strong); color: var(--text); font: 600 12px var(--font); cursor: pointer; }
+.mini-rate { display: none; }
+body[data-mode="mini"] .content-layer { gap: 6px; padding: 6px; min-height: 200px; }
+body[data-mode="mini"] .p-header { justify-content: flex-end; padding: 0; }
+body[data-mode="mini"] .p-logo-row,
+body[data-mode="mini"] .p-btn-refresh,
+body[data-mode="mini"] .stats-panel,
+body[data-mode="mini"] .history-section,
+body[data-mode="mini"] #apiMini,
+body[data-mode="mini"] .p-status,
+body[data-mode="mini"] .pop-section-label,
+body[data-mode="mini"] .qr-hint,
+body[data-mode="mini"] .deck-row-label { display: none !important; }
+body[data-mode="mini"] .deck-row { padding: 4px 8px; gap: 4px; border-radius: 8px; flex-wrap: wrap; }
+body[data-mode="mini"] .deck-select { padding: 2px 0; font-size: 12px; width: 100%; flex: 1 1 100%; }
+body[data-mode="mini"] .mini-rate { display: inline; flex-shrink: 0; font: 700 12px var(--mono); color: var(--accent); }
+body[data-mode="mini"] .quick-record { padding: 6px; border: 0; border-radius: 8px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+body[data-mode="mini"] .hist-btn-turn { min-width: 28px; min-height: 28px; font-size: 12px; border-radius: 6px; }
+body[data-mode="mini"] .qr-opp { max-width: none; width: 0; min-height: 28px; font-size: 12px; }
+body[data-mode="mini"] .qr-row + .qr-row { margin-top: 4px; }
+body[data-mode="mini"] .qr-btn { min-height: 36px; padding: 4px 0; font-size: 14px; border-radius: 6px; box-shadow: none; }
+body[data-mode="mini"] .empty-state { padding: 20px 12px; }
 </style>
 </head>
-<body>
-<!-- VERSION: 2026-07-23-v4 (compact stats) -->
+<body data-mode="mini">
+<!-- VERSION: 2026-10-22-v5 (square mini mode) -->
 
 <!-- Background decorative blobs (blurred by glass panels above) -->
 <div class="bg-deco">
@@ -633,7 +664,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--info); out
       <img src="malo-tcg-logo.png" alt="MALO-TCG" class="p-logo">
       <span class="p-logo-text">战绩追踪</span>
     </div>
-    <button class="p-btn-refresh" onclick="requestRefresh()" title="刷新排位数据（只读，不会改对局记录）">🔄</button>
+    <div class="p-header-actions"><button id="modeToggle" class="mode-toggle" onclick="togglePopupMode()" aria-label="切换到详细版">展开</button><button class="p-btn-refresh" onclick="requestRefresh()" title="刷新排位数据（只读，不会改对局记录）">🔄</button></div>
   </div>
 
   <!-- Stats -->
@@ -676,7 +707,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--info); out
     <span class="deck-row-label">使用卡组</span>
     <span class="deck-icon">🃏</span>
     <select id="deckSel" class="deck-select"></select>
-    <span class="deck-arrow">▾</span>
+    <span class="deck-arrow">▾</span><span id="miniRate" class="mini-rate" title="当前卡组胜率">--</span>
   </div>
 
   <!-- 快速记录：打完一局点一下「胜」或「负」 -->
@@ -725,6 +756,23 @@ var STORAGE_KEY = 'ptcg-tracker-data';
 var channel = new BroadcastChannel('ptcg-sync');
 var CIRCUMFERENCE = 2 * Math.PI * 38;
 var data = null;
+var POPUP_MODE_KEY = 'ptcg-popup-mode';
+function applyPopupMode(mode, resize) {
+  var mini = mode !== 'detail';
+  document.body.dataset.mode = mini ? 'mini' : 'detail';
+  byId('modeToggle').textContent = mini ? '展开' : '微缩';
+  byId('modeToggle').setAttribute('aria-label', mini ? '切换到详细版' : '切换到微缩版');
+  byId('modeToggle').setAttribute('aria-expanded', String(!mini));
+  if (resize) {
+    // Browser/OS minimum window sizes still apply.
+    try { window.resizeTo((mini ? 200 : 400) + Math.max(0, outerWidth - innerWidth), (mini ? 200 : 620) + Math.max(0, outerHeight - innerHeight)); } catch (e) {}
+  }
+}
+function togglePopupMode() {
+  var mode = document.body.dataset.mode === 'mini' ? 'detail' : 'mini';
+  try { localStorage.setItem(POPUP_MODE_KEY, mode); } catch (e) {}
+  applyPopupMode(mode, true);
+}
 
 // 存储层（store.js）负责「读最新 → 合并 → 写回」，避免悬浮窗把主页面刚写的记录整份覆盖掉
 function readStore() {
@@ -830,6 +878,7 @@ function render() {
 
   byId('gFill').setAttribute('stroke-dashoffset', CIRCUMFERENCE * (1 - wr / 100));
   byId('gPct').textContent = total > 0 ? wr.toFixed(1) + '%' : '--';
+  byId('miniRate').textContent = '胜率 ' + (total > 0 ? wr.toFixed(1) + '%' : '--');
   byId('deckWins').textContent = t.wins;
   byId('deckLosses').textContent = t.losses;
   byId('deckTotal').textContent = '合计 ' + total + ' 场';
@@ -1148,6 +1197,9 @@ byId('historyList').addEventListener('change', function(e) {
   }
 });
 
+var savedPopupMode = 'mini';
+try { savedPopupMode = localStorage.getItem(POPUP_MODE_KEY) || 'mini'; } catch (e) {}
+applyPopupMode(savedPopupMode, false);
 applyTheme(getTheme());
 loadData();
 render();
