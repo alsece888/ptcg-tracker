@@ -6,3 +6,7 @@ cloud/node_modules/
 *teable-token*.txt
 .workbuddy/
 _preview_server.mjs
+.build-tools/
+desktop-launcher/bin/
+desktop-launcher/artifacts/
+desktop-launcher/obj/

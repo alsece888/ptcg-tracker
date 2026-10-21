@@ -3121,6 +3121,25 @@ body { background: radial-gradient(circle at 90% 0%, var(--primary-dim), transpa
 .section-nav a:hover, .section-nav a:focus-visible {
   color: var(--primary); border-color: var(--primary); background: var(--primary-dim);
 }
+.desktop-download {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px;
+  padding: 16px 20px; margin: 8px 0 20px; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.desktop-download-copy { flex: 1 1 260px; min-width: 0; }
+.desktop-download h2 { font-size: 16px; font-weight: 700; }
+.desktop-download h2 span { margin-left: 8px; font-size: 12px; font-weight: 500; color: var(--text-dim); }
+.desktop-download p { margin-top: 4px; font-size: 13px; color: var(--text-dim); line-height: 1.7; }
+.desktop-download .desktop-download-meta { font-size: 12px; }
+.desktop-download-button { flex: 0 0 auto; text-decoration: none; text-align: center; white-space: normal; }
+.desktop-download-help { flex: 1 1 100%; font-size: 12px; color: var(--text-dim); }
+.desktop-download-help summary { cursor: pointer; width: fit-content; }
+.desktop-download-help a { color: var(--accent); }
+.desktop-download a:focus-visible, .desktop-download summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+@media (max-width: 540px) {
+  .desktop-download { padding: 16px; gap: 12px; }
+  .desktop-download-button { width: 100%; }
+}
 .module-title {
   border: 0; padding: 0; margin: 30px 0 15px; font-size: 25px; letter-spacing: -.03em;
   display: flex; align-items: baseline; gap: 11px;
