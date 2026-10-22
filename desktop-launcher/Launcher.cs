@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using System.Windows.Shell;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows;
@@ -33,6 +34,7 @@ namespace MaloTCG
         readonly System.Collections.Generic.List<Button> buttons = new System.Collections.Generic.List<Button>();
         readonly bool demo;
         readonly bool selfTest;
+        readonly bool systemBackdrop = Environment.OSVersion.Version.Build >= 22621;
         string mode = "home";
         bool ready;
         bool closing;
@@ -63,9 +65,10 @@ namespace MaloTCG
             selfTest = args.Contains("--self-test");
             Title = demo ? "MALO-TCG 桌面启动器 · 演示" : "MALO-TCG 桌面启动器";
             WindowStyle = WindowStyle.None;
-            AllowsTransparency = true;
+            AllowsTransparency = !systemBackdrop;
             Background = Brushes.Transparent;
-            ResizeMode = ResizeMode.NoResize;
+            ResizeMode = systemBackdrop ? ResizeMode.CanResize : ResizeMode.NoResize;
+            if (systemBackdrop) WindowChrome.SetWindowChrome(this, new WindowChrome { CaptionHeight = 0, ResizeBorderThickness = new Thickness(0), GlassFrameThickness = new Thickness(-1), CornerRadius = new CornerRadius(0), UseAeroCaptionButtons = false });
             Width = Math.Min(1024, SystemParameters.WorkArea.Width);
             Height = Math.Min(760, SystemParameters.WorkArea.Height);
             MinWidth = 150;
@@ -119,7 +122,7 @@ namespace MaloTCG
             Panel.SetZIndex(floatingDrag, 10);
             grid.Children.Add(floatingDrag);
             // Match the rectangular compositor backdrop with a fully tinted rectangular surface.
-            shell = new Border { CornerRadius = new CornerRadius(0), Child = grid };
+            shell = new Border { CornerRadius = new CornerRadius(systemBackdrop ? 0 : 10), Child = grid };
             Content = shell;
             PaintShell();
             SourceInitialized += (s, e) => PaintShell();
@@ -261,7 +264,7 @@ namespace MaloTCG
             toolbar.Background = Brushes.Transparent;
             floatingMenu.Visibility = home ? Visibility.Collapsed : Visibility.Visible;
             floatingDrag.Visibility = home ? Visibility.Collapsed : Visibility.Visible;
-            byte alpha = home ? (byte)255 : (byte)Math.Round(255 * surface);
+            byte alpha = home || (systemBackdrop && !frosted) ? (byte)255 : (byte)Math.Round(255 * surface);
             ApplyBackdrop(!home && frosted);
             shell.BorderThickness = new Thickness(0);
             shell.Background = new SolidColorBrush(dark ? Color.FromArgb(alpha, 23, 32, 41) : Color.FromArgb(alpha, 250, 252, 251));
@@ -270,17 +273,9 @@ namespace MaloTCG
             floatingDrag.Foreground = dark ? Brushes.LightGray : Brushes.DimGray;
         }
 
-        [StructLayout(LayoutKind.Sequential)]
-        struct AccentPolicy { public int State, Flags, GradientColor, AnimationId; }
-        [StructLayout(LayoutKind.Sequential)]
-        struct CompositionData { public int Attribute; public IntPtr Data; public int Size; }
-        [DllImport("user32.dll")]
-        static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref CompositionData data);
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
-        [DllImport("user32.dll")]
-        static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, bool redraw);
         [DllImport("user32.dll")]
         static extern int GetWindowRgn(IntPtr hwnd, IntPtr region);
         [DllImport("gdi32.dll")]
@@ -288,39 +283,41 @@ namespace MaloTCG
         [DllImport("gdi32.dll")]
         static extern bool DeleteObject(IntPtr obj);
 
-        bool NativeSurfaceIsRectangular()
+        [DllImport("dwmapi.dll")]
+        static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+        static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
+
+        bool SystemCornersOwnSurface()
         {
+            var handle = new WindowInteropHelper(this).Handle;
+            if (!systemBackdrop) return AllowsTransparency && shell.CornerRadius.TopLeft == 10 && !blurApplied;
+            int corners;
             var region = CreateRectRgn(0, 0, 0, 0);
-            if (region == IntPtr.Zero) return false;
             try {
-                // No custom HWND region: compositor and application use the same full rectangle.
-                return GetWindowRgn(new WindowInteropHelper(this).Handle, region) == 0
-                    && shell.CornerRadius == new CornerRadius(0) && shell.Clip == null;
-            } finally { DeleteObject(region); }
+                return !AllowsTransparency && (GetWindowLongPtr(handle, -20).ToInt64() & 0x80000) == 0
+                    && GetWindowRgn(handle, region) == 0
+                    && DwmGetWindowAttribute(handle, 33, out corners, sizeof(int)) == 0 && corners == 2;
+            } finally { if (region != IntPtr.Zero) DeleteObject(region); }
         }
 
         void ApplyBackdrop(bool enabled)
         {
             var handle = new WindowInteropHelper(this).Handle;
             if (handle == IntPtr.Zero) return;
-            // Accent blur can ignore rounded HWND regions on layered WPF windows.
-            // Keep both surfaces rectangular rather than exposing dark corner wedges.
-            SetWindowRgn(handle, IntPtr.Zero, true);
-            shell.Clip = null;
-            var accent = new AccentPolicy { State = enabled ? 3 : 0, Flags = 0 };
-            var memory = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(AccentPolicy)));
-            try {
-                Marshal.StructureToPtr(accent, memory, false);
-                var data = new CompositionData { Attribute = 19, Data = memory, Size = Marshal.SizeOf(typeof(AccentPolicy)) };
-                blurApplied = SetWindowCompositionAttribute(handle, ref data) != 0 && enabled;
-                // Windows 11: suppress the compositor's default outline too.
-                int noRounding = 1;
-                DwmSetWindowAttribute(handle, 33, ref noRounding, sizeof(int));
-                int noBorder = unchecked((int)0xFFFFFFFE);
-                DwmSetWindowAttribute(handle, 34, ref noBorder, sizeof(int));
-            } catch (EntryPointNotFoundException) { blurApplied = false; }
-            catch (DllNotFoundException) { blurApplied = false; }
-            finally { Marshal.FreeHGlobal(memory); }
+            blurApplied = false;
+            // On older Windows, keep smooth alpha-rounded translucency without
+            // applying the incompatible accent blur to a layered WPF surface.
+            if (!systemBackdrop) return;
+            var source = HwndSource.FromHwnd(handle);
+            if (source != null) source.CompositionTarget.BackgroundColor = Colors.Transparent;
+            int corners = 2, noBorder = unchecked((int)0xFFFFFFFE), backdrop = enabled ? 3 : 1, theme = dark ? 1 : 0;
+            DwmSetWindowAttribute(handle, 33, ref corners, sizeof(int));
+            DwmSetWindowAttribute(handle, 34, ref noBorder, sizeof(int));
+            DwmSetWindowAttribute(handle, 20, ref theme, sizeof(int));
+            int result = DwmSetWindowAttribute(handle, 38, ref backdrop, sizeof(int));
+            int actual;
+            blurApplied = enabled && result == 0 && DwmGetWindowAttribute(handle, 38, out actual, sizeof(int)) == 0 && actual == 3;
         }
 
         async Task ApplyWebMode()
@@ -347,7 +344,7 @@ namespace MaloTCG
             pinItem.Click += (s, e) => { Topmost = !Topmost; PaintShell(); };
             menu.Items.Add(pinItem);
             menu.Items.Add(new Separator());
-            var frostItem = new MenuItem { Header = "毛玻璃背景", IsCheckable = true, IsChecked = frosted };
+            var frostItem = new MenuItem { Header = systemBackdrop ? "毛玻璃背景（关闭为实色）" : "毛玻璃背景（此系统使用半透明）", IsCheckable = true, IsChecked = frosted };
             frostItem.Click += (s, e) => { frosted = !frosted; PaintShell(); };
             menu.Items.Add(frostItem);
             foreach (var value in new[] { 0.55, 0.72, 0.90, 1.0 }) {
@@ -415,12 +412,13 @@ namespace MaloTCG
                 report["nativeBlurAccepted"] = blurApplied;
                 report["borderlessSurface"] = shell.BorderThickness == new Thickness(0);
                 report["surfaceOpacity"] = surface;
-                report["nativeSurfaceRectangular"] = NativeSurfaceIsRectangular();
+                report["systemBackdropSupported"] = systemBackdrop;
+                report["systemRoundedSurface"] = SystemCornersOwnSurface();
                 int pixelWidth = (int)ActualWidth, pixelHeight = (int)ActualHeight;
-                report["cornerSourceFilled"] = pixels[3] >= 180 && pixels[(pixelWidth - 1) * 4 + 3] >= 180
+                report["cornerSourceFilled"] = !systemBackdrop || (pixels[3] >= 180 && pixels[(pixelWidth - 1) * 4 + 3] >= 180
                     && pixels[(pixelHeight - 1) * pixelWidth * 4 + 3] >= 180
                     && pixels[(pixelWidth * pixelHeight - 1) * 4 + 3] >= 180
-                    && shell.CornerRadius == new CornerRadius(0) && shell.Clip == null;
+                    && shell.CornerRadius == new CornerRadius(0) && shell.Clip == null);
                 report["bodyBackgroundIsTransparent"] = await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.getElementById('ptcg-desktop-panel').contentDocument.querySelector('.quick-record')).backgroundColor==='rgba(0, 0, 0, 0)'");
                 report["compactLayoutGrouped"] = await web.CoreWebView2.ExecuteScriptAsync("(()=>{const w=document.getElementById('ptcg-desktop-panel').contentWindow;const d=w.document;const turn=d.getElementById('qrTurnFirst').getBoundingClientRect();const opp=d.getElementById('qrOpp').getBoundingClientRect();const win=d.querySelector('.qr-btn.win').getBoundingClientRect();const loss=d.querySelector('.qr-btn.loss').getBoundingClientRect();return [turn,opp,win,loss].every(r=>r.left>=0&&r.right<=w.innerWidth&&r.top>=0&&r.bottom<=w.innerHeight)&&turn.bottom<=opp.top+1&&opp.bottom<=win.top+1&&Math.abs(win.top-loss.top)<1;})()");
                 var cachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session-cache-self-test.bin");
@@ -443,7 +441,7 @@ namespace MaloTCG
                 var output = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "self-test.json");
                 await SetMode("detail");
                 await Task.Delay(300);
-                report["detailSurfaceRectangular"] = NativeSurfaceIsRectangular();
+                report["detailSystemRoundedSurface"] = SystemCornersOwnSurface();
                 report["detailWidth"] = Width;
                 report["detailMode"] = await web.CoreWebView2.ExecuteScriptAsync("PtcgDesktop.getMode()");
                 await Task.Delay(16000);
