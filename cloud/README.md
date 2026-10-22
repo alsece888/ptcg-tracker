@@ -28,7 +28,7 @@
 3. 在 `cloud/` 目录部署 `worker.mjs`：`npx wrangler login`、`npx wrangler deploy`。在 Worker Secrets 中设置 `TEABLE_TOKEN`（同一令牌）与 `AUTH_SECRET`（随机生成、至少 32 字节的密钥）。不要把 secret 写进 `wrangler.jsonc` 的 `vars`。
 4. 将得到的 HTTPS Worker 地址写入 [cloud-config.js](../cloud-config.js)，发布 GitHub Pages。测试账号注册、错误密码、上传、重复上传和换浏览器读取后再让旧用户上传。
 
-Worker 只允许 `https://malo-ptcg.cn` 和 `https://www.malo-ptcg.cn` 发起浏览器请求。登录接口有速率限制；登录成功的签名会话保存在当前标签页，12 小时到期。记录按账号 ID 隔离，不能靠修改请求中的 ID 读取其他人的记录。
+Worker 只允许 `https://malo-ptcg.cn` 和 `https://www.malo-ptcg.cn` 发起浏览器请求。登录接口有速率限制；登录成功的签名会话保存在当前标签页，48 小时到期。记录按账号 ID 隔离，不能靠修改请求中的 ID 读取其他人的记录。
 
 ## 当前同步范围
 

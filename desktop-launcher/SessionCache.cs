@@ -30,7 +30,7 @@ namespace MaloTCG
             if (parts.Length != 4 || parts[0] != session.userId || !long.TryParse(parts[1], out expires)) return false;
             if (!Regex.IsMatch(parts[2], "^[A-Za-z0-9_-]+$") || !Regex.IsMatch(parts[3], "^[A-Za-z0-9_-]+$")) return false;
             long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            return expires > now && expires <= now + 12 * 60 * 60 + 60;
+            return expires > now && expires <= now + 48 * 60 * 60 + 60;
         }
 
         public bool Clear()

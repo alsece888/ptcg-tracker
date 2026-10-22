@@ -23,11 +23,12 @@
       [data-theme="dark"] { --popup-surface: rgba(23,32,41,${surface}); }
       .p-header { display: none !important; }
       .deck-row { padding-right: 30px; padding-left: 22px; }
-      body[data-mode="mini"] .content-layer { min-height: 0; height: 100vh; padding: 6px; gap: 4px; }
+      body[data-mode="mini"] .content-layer { min-height: 0; height: 100vh; padding: 5px; gap: 3px; }
       body[data-mode="mini"] .deck-row { padding: 0 24px 2px 18px; }
-      body[data-mode="mini"] .quick-record { justify-content: center; gap: 6px; padding: 0; }
-      body[data-mode="mini"] .hist-btn-turn { min-width: 26px; }
-      body[data-mode="mini"] .qr-btn { min-height: 32px; }
+      body[data-mode="mini"] .quick-record { justify-content: center; gap: 5px; padding: 0; }
+      body[data-mode="mini"] .hist-btn-turn { min-width: 22px; min-height: 24px; padding: 1px 4px; }
+      body[data-mode="mini"] .qr-opp { min-height: 24px; font-size: 10px; }
+      body[data-mode="mini"] .qr-btn { min-height: 28px; font-size: 13px; }
       body[data-mode="mini"] .qr-row + .qr-row { margin-top: 0; }
     `;
     const theme = localStorage.getItem('ptcg-theme') || 'light';
@@ -84,7 +85,7 @@
     const cloudStatus = document.getElementById('cloudStatus');
     const hint = document.createElement('p');
     hint.style.cssText = 'font-size:12px;color:var(--text-dim);margin-top:6px';
-    hint.textContent = '启动器会加密记住有效登录（最长 12 小时），不保存密码；退出登录会清除。';
+    hint.textContent = '启动器会加密记住有效登录（最长 48 小时），不保存密码；退出登录会清除。';
     cloudStatus?.after(hint);
     let previousSession;
     const rememberSession = () => {

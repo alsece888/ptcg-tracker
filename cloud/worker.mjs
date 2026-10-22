@@ -7,6 +7,7 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 40;
 const MAX_BATCH = 10;
 const MAX_BODY_BYTES = 100_000;
+const SESSION_TTL_SECONDS = 48 * 60 * 60;
 
 function response(data, status = 200, origin = '') {
   const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
@@ -124,7 +125,7 @@ async function verify(env, message, signature) {
 }
 
 async function sessionToken(env, userId) {
-  const expires = Math.floor(Date.now() / 1000) + 12 * 60 * 60;
+  const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
   const nonce = randomSalt();
   const payload = `${userId}.${expires}.${nonce}`;
   return `${payload}.${await sign(env, `session:${payload}`)}`;
@@ -350,6 +351,9 @@ export default {
     if (request.headers.has('Origin') && !origin) return response({ error: '来源不允许' }, 403);
     try {
       const url = new URL(request.url);
+      if (url.pathname === '/api/auth/config' && request.method === 'GET') {
+        return response({ sessionTtlSeconds: SESSION_TTL_SECONDS }, 200, origin);
+      }
       if (url.pathname === '/api/auth/salt' && request.method === 'GET') {
         const userId = validUserId(url.searchParams.get('userId'));
         await authRate(request, env, userId);

@@ -78,6 +78,24 @@ async function register(userId) {
   return result.body.token;
 }
 
+test('sessions last 48 hours, survive the next day, then expire', async () => {
+  const mock = mockTeable();
+  const originalFetch = globalThis.fetch;
+  const originalNow = Date.now;
+  const start = originalNow();
+  globalThis.fetch = mock.fetch;
+  Date.now = () => start;
+  try {
+    assert.equal((await api('GET', '/api/auth/config')).body.sessionTtlSeconds, 48 * 60 * 60);
+    const token = await register('ttl-check');
+    assert.equal(Number(token.split('.')[1]), Math.floor(start / 1000) + 48 * 60 * 60);
+    Date.now = () => start + 47 * 60 * 60 * 1000;
+    assert.equal((await api('GET', '/api/records', undefined, token)).status, 200);
+    Date.now = () => start + 48 * 60 * 60 * 1000 + 1000;
+    assert.equal((await api('GET', '/api/records', undefined, token)).status, 401);
+  } finally { globalThis.fetch = originalFetch; Date.now = originalNow; }
+});
+
 function record(id, extra = {}) {
   return {
     id, deckId: 'deck-1', deckName: '测试卡组',

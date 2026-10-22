@@ -64,8 +64,8 @@ namespace MaloTCG
             ResizeMode = ResizeMode.NoResize;
             Width = Math.Min(1024, SystemParameters.WorkArea.Width);
             Height = Math.Min(760, SystemParameters.WorkArea.Height);
-            MinWidth = 180;
-            MinHeight = 160;
+            MinWidth = 150;
+            MinHeight = 150;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             UseLayoutRounding = true;
             var grid = new Grid();
@@ -231,8 +231,8 @@ namespace MaloTCG
                 Height = homeBounds.Height > 0 ? homeBounds.Height : 760;
                 if (homeBounds.Width > 0) { Left = homeBounds.Left; Top = homeBounds.Top; }
             } else {
-                Width = mode == "mini" ? 180 : 400;
-                Height = mode == "mini" ? 180 : 620;
+                Width = mode == "mini" ? 150 : 400;
+                Height = mode == "mini" ? 150 : 620;
                 Topmost = true;
                 var area = SystemParameters.WorkArea;
                 Left = double.IsNaN(floatPosition.X) ? area.Right - Width - 24 : floatPosition.X;
@@ -350,7 +350,7 @@ namespace MaloTCG
                 report["bodyBackgroundIsTransparent"] = await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.getElementById('ptcg-desktop-panel').contentDocument.querySelector('.quick-record')).backgroundColor==='rgba(0, 0, 0, 0)'");
                 var cachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session-cache-self-test.bin");
                 var cache = new SessionCache(cachePath);
-                string testToken = "desktop-test." + (DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 3600) + ".test-nonce.test-signature";
+                string testToken = "desktop-test." + (DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 48 * 60 * 60) + ".test-nonce.test-signature";
                 bool saveSucceeded = cache.Save(json.Serialize(new RememberedSession { userId = "desktop-test", token = testToken }));
                 var reopened = new SessionCache(cachePath).Read();
                 report["rememberedSessionRoundTrip"] = saveSucceeded && reopened != null && reopened.token == testToken;
