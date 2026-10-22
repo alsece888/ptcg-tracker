@@ -1,4 +1,4 @@
-MALO-TCG Windows 轻量启动器 · 0.1.6 试用版
+MALO-TCG Windows 轻量启动器 · 0.1.7 试用版
 
 使用：解压整个文件夹，双击 MaloTCG.exe。不要只移动 exe，旁边的 DLL 必须保留。
 需要：Windows 10/11 x64、.NET Framework 4.8、Microsoft Edge WebView2 Evergreen Runtime。

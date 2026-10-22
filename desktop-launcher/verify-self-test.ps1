@@ -7,6 +7,7 @@ $checks = [ordered]@{
     'No native title bar' = ($report.noNativeTitleBar -eq $true)
     'Real transparent surface pixels' = ($report.allowsTransparency -and $report.minimumAlpha -eq 0 -and $report.hasSemitransparentPixels -and $report.panelAlpha -gt 0 -and $report.panelAlpha -lt 255)
     'Borderless frosted panel' = ($report.borderlessSurface -and $report.nativeBlurAccepted -and $report.surfaceOpacity -eq 0.72)
+    'Native rounded corners clip the blur in both sizes' = ($report.nativeCornersClipped -and $report.detailCornersClipped)
     'Always on top' = ($report.topmost -eq $true)
     'Modes preserve page and session' = ($report.detailWidth -eq 400 -and $report.detailMode -eq '"detail"' -and $report.homeMode -eq '"home"' -and $report.sameDocumentAndSession -eq 'true')
     'No clipped compact content' = ($report.contentHeight -le $report.panelHeight)
