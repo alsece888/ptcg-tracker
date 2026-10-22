@@ -3,7 +3,7 @@ $report = Get-Content (Join-Path $PSScriptRoot 'bin/self-test.json') -Raw -Encod
 $checks = [ordered]@{
     'Record and shared store' = ($report.count -eq 11 -and $report.result -eq 'win' -and $report.turn -eq 'second' -and $report.opponent -eq '沙奈朵 ex')
     'Updated win rate' = ($report.rate -eq '胜率 72.7%')
-    'Square native window' = ($report.windowWidth -eq 200 -and $report.windowHeight -eq 200)
+    'Square native window' = ($report.windowWidth -eq 180 -and $report.windowHeight -eq 180)
     'No native title bar' = ($report.noNativeTitleBar -eq $true)
     'Real transparent surface pixels' = ($report.allowsTransparency -and $report.minimumAlpha -eq 0 -and $report.hasSemitransparentPixels -and $report.panelAlpha -gt 0 -and $report.panelAlpha -lt 255)
     'Always on top' = ($report.topmost -eq $true)
@@ -11,6 +11,10 @@ $checks = [ordered]@{
     'No clipped compact content' = ($report.contentHeight -le $report.panelHeight)
     'No false background-page closed warning' = ($report.backgroundStatus -eq '"主页在后台运行"')
     'Continuous panel without floating title row' = ($report.toolbarHeight -eq 0 -and $report.bottomAlpha -ge 229 -and $report.panelAlpha -ge 229 -and $report.bodyBackgroundIsTransparent -eq 'true')
+    'Remembered session survives reopening and is encrypted' = ($report.rememberedSessionRoundTrip -and $report.sessionProtectedAtRest)
+    'Logout clears remembered session' = ($report.logoutClearsRememberedSession -eq $true)
+    'Expired remembered session is rejected' = ($report.expiredSessionRejected -eq $true)
+    'Corrupt remembered session is rejected' = ($report.corruptSessionRejected -eq $true)
 }
 foreach ($check in $checks.GetEnumerator()) {
     Write-Output "$(if ($check.Value) { 'PASS' } else { 'FAIL' }): $($check.Key)"

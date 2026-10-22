@@ -37,6 +37,8 @@ namespace MaloTCG
         bool testing;
         double surface = 0.90;
         bool dark;
+        SessionCache sessionCache;
+        string restoreScriptId;
         Rect homeBounds;
         Point floatPosition = new Point(double.NaN, double.NaN);
 
@@ -62,7 +64,7 @@ namespace MaloTCG
             ResizeMode = ResizeMode.NoResize;
             Width = Math.Min(1024, SystemParameters.WorkArea.Width);
             Height = Math.Min(760, SystemParameters.WorkArea.Height);
-            MinWidth = 200;
+            MinWidth = 180;
             MinHeight = 160;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             UseLayoutRounding = true;
@@ -136,6 +138,7 @@ namespace MaloTCG
             try
             {
                 var profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MaloTCG", demo ? "LauncherDemo" : "Launcher");
+                sessionCache = new SessionCache(Path.Combine(profile, "remembered-session.bin"));
                 var env = await CoreWebView2Environment.CreateAsync(null, profile);
                 await web.EnsureCoreWebView2Async(env);
                 var core = web.CoreWebView2;
@@ -153,6 +156,9 @@ namespace MaloTCG
                 core.NewWindowRequested += (s, e) => { e.Handled = true; OpenExternal(e.Uri); };
                 core.PermissionRequested += (s, e) => e.State = CoreWebView2PermissionState.Deny;
                 core.NavigationCompleted += (s, e) => {
+                    // Session storage survives refreshes in this WebView. Restore only on
+                    // the first successful navigation so logout cannot resurrect a token.
+                    if (e.IsSuccess && restoreScriptId != null) { core.RemoveScriptToExecuteOnDocumentCreated(restoreScriptId); restoreScriptId = null; }
                     if (e.IsSuccess) { web.Visibility = Visibility.Visible; status.Visibility = Visibility.Collapsed; }
                     else { web.Visibility = Visibility.Hidden; status.Visibility = Visibility.Visible; status.Text = "在线页面加载失败：" + e.WebErrorStatus + "\n请检查网络，再按 F5 或点击 ⋯ → 刷新。已保存的本地记录不会清除。"; }
                 };
@@ -170,9 +176,17 @@ namespace MaloTCG
                         }
                         if ((string)command == "mode" && message.ContainsKey("mode")) await SetMode(Convert.ToString(message["mode"]));
                         if ((string)command == "theme" && message.ContainsKey("theme")) { dark = Convert.ToString(message["theme"]) == "dark"; PaintShell(); }
+                        if ((string)command == "session" && !demo && message.ContainsKey("session")) {
+                            bool saved = sessionCache.Save(json.Serialize(message["session"]));
+                            core.PostWebMessageAsJson("{\"type\":\"remember-status\",\"saved\":" + (saved ? "true" : "false") + "}");
+                        }
                     } catch (Exception ex) { Debug.WriteLine(ex.Message); }
                 };
                 if (demo) await core.AddScriptToExecuteOnDocumentCreatedAsync(ReadResource("DemoSeed"));
+                if (!demo) {
+                    var restore = sessionCache.RestoreScript();
+                    if (restore != null) restoreScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(restore);
+                }
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(ReadResource("DesktopBridge"));
                 core.Navigate(Site + "?desktop=1&v=" + DateTimeOffset.UtcNow.ToUnixTimeSeconds());
             }
@@ -217,8 +231,8 @@ namespace MaloTCG
                 Height = homeBounds.Height > 0 ? homeBounds.Height : 760;
                 if (homeBounds.Width > 0) { Left = homeBounds.Left; Top = homeBounds.Top; }
             } else {
-                Width = mode == "mini" ? 200 : 400;
-                Height = mode == "mini" ? 200 : 620;
+                Width = mode == "mini" ? 180 : 400;
+                Height = mode == "mini" ? 180 : 620;
                 Topmost = true;
                 var area = SystemParameters.WorkArea;
                 Left = double.IsNaN(floatPosition.X) ? area.Right - Width - 24 : floatPosition.X;
@@ -334,6 +348,20 @@ namespace MaloTCG
                 report["bottomAlpha"] = pixels[((int)ActualHeight - 5) * (int)ActualWidth * 4 + 100 * 4 + 3];
                 report["toolbarHeight"] = toolbarRow.ActualHeight;
                 report["bodyBackgroundIsTransparent"] = await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.getElementById('ptcg-desktop-panel').contentDocument.querySelector('.quick-record')).backgroundColor==='rgba(0, 0, 0, 0)'");
+                var cachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session-cache-self-test.bin");
+                var cache = new SessionCache(cachePath);
+                string testToken = "desktop-test." + (DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 3600) + ".test-nonce.test-signature";
+                bool saveSucceeded = cache.Save(json.Serialize(new RememberedSession { userId = "desktop-test", token = testToken }));
+                var reopened = new SessionCache(cachePath).Read();
+                report["rememberedSessionRoundTrip"] = saveSucceeded && reopened != null && reopened.token == testToken;
+                report["sessionProtectedAtRest"] = saveSucceeded && !System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(cachePath)).Contains(testToken);
+                cache.Clear();
+                report["logoutClearsRememberedSession"] = new SessionCache(cachePath).Read() == null && !File.Exists(cachePath);
+                string expired = "desktop-test." + (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 1) + ".test-nonce.test-signature";
+                cache.Save(json.Serialize(new RememberedSession { userId = "desktop-test", token = expired }));
+                report["expiredSessionRejected"] = cache.Read() == null && !File.Exists(cachePath);
+                File.WriteAllBytes(cachePath, new byte[] { 1, 2, 3, 4 });
+                report["corruptSessionRejected"] = cache.Read() == null && !File.Exists(cachePath);
                 var encoder = new PngBitmapEncoder();
                 encoder.Frames.Add(BitmapFrame.Create(image));
                 using (var file = File.Create(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "desktop-preview.png"))) encoder.Save(file);

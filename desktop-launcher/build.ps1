@@ -13,12 +13,13 @@ if (!(Test-Path "$dependencyRoot/lib/net462/Microsoft.Web.WebView2.Wpf.dll")) {
     Expand-Archive -LiteralPath $packagePath -DestinationPath $dependencyRoot -Force
 }
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-$references = @('System.dll', 'System.Core.dll', 'System.Xaml.dll', 'System.Drawing.dll', 'System.Web.Extensions.dll') | ForEach-Object { "/reference:$framework/$_" }
+$references = @('System.dll', 'System.Core.dll', 'System.Xaml.dll', 'System.Drawing.dll', 'System.Web.Extensions.dll', 'System.Security.dll') | ForEach-Object { "/reference:$framework/$_" }
 $references += @('WindowsBase.dll', 'PresentationCore.dll', 'PresentationFramework.dll') | ForEach-Object { "/reference:$framework/WPF/$_" }
 $references += @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.Wpf.dll') | ForEach-Object { "/reference:$dependencyRoot/lib/net462/$_" }
 $compilerArgs = @('/nologo', '/target:winexe', '/platform:x64', '/optimize+', "/out:$outputRoot\MaloTCG.exe", "/win32manifest:$PSScriptRoot\app.manifest", "/resource:$PSScriptRoot\bridge.js,DesktopBridge", "/resource:$PSScriptRoot\demo-seed.js,DemoSeed")
 $compilerArgs += $references | ForEach-Object { $_.Replace('/', '\').Replace('\reference:', '/reference:') }
 $compilerArgs += "$PSScriptRoot\Launcher.cs"
+$compilerArgs += "$PSScriptRoot\SessionCache.cs"
 & "$framework/csc.exe" @compilerArgs
 if ($LASTEXITCODE -ne 0) { throw 'Launcher compilation failed' }
 Copy-Item "$dependencyRoot/lib/net462/Microsoft.Web.WebView2.Core.dll", "$dependencyRoot/lib/net462/Microsoft.Web.WebView2.Wpf.dll", "$dependencyRoot/runtimes/win-x64/native/WebView2Loader.dll" -Destination $outputRoot -Force
