@@ -44,3 +44,5 @@ WPF 无边框透明窗口 + WebView2CompositionControl，复用正式网站的�
 0.1.9：用户截图确认0.1.8仍有灰色三角。改为无边框直角轮廓，不再对层叠窗口使用自定义圆角区域。原生背景与应用表面均为完整矩形，保留毛玻璃、72%不透明度、配色及150×150布局。检查微缩/详细无自定义区域及四角源像素填满；不再把裁切检查当作毛玻璃视觉验证。
 
 0.1.10：Windows 11 build22621及以上使用非layered窗口、WindowChrome全客户区玻璃、DWM corner preference=ROUND和SYSTEMBACKDROP_TYPE=TRANSIENTWINDOW，系统统一绘制圆角与亚克力，停止SetWindowCompositionAttribute旧accent路径。旧Windows使用无原生blur的圆角半透明背景，避免四角三角残留（旧系统未在实体环境验证）。现代系统关闭毛玻璃使用实色底避免玻璃区黑底。新验收直接读取HWND扩展风格及DWM属性，确认非layered、无自定义区域和原生圆角。RenderTargetBitmap不包含DWM圆角及材质，不能作为最终桌面截图。
+
+0.1.11：新增深色底、卡牌与绿色闪电图标。assets/launcher.ico包含16/20/24/32/48/64/128/256八种尺寸，编译为Win32程序图标；256px PNG嵌入程序集并设置WPF Window.Icon。无需额外发布图标文件。create-icon.ps1可重建素材。

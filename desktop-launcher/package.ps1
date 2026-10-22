@@ -6,7 +6,7 @@ if ((Get-Item (Join-Path $binaryRoot 'MaloTCG.exe')).LastWriteTimeUtc -gt $repor
     throw 'Acceptance report is older than the executable; rerun --self-test before packaging'
 }
 $artifactRoot = Join-Path $PSScriptRoot 'artifacts'
-$folder = Join-Path $artifactRoot 'MALO-TCG-Launcher-0.1.10-win-x64'
+$folder = Join-Path $artifactRoot 'MALO-TCG-Launcher-0.1.11-win-x64'
 $files = @('MaloTCG.exe', 'MaloTCG.exe.config', 'Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.Wpf.dll', 'WebView2Loader.dll', 'WebView2-LICENSE.txt', 'README.txt')
 New-Item -ItemType Directory -Force -Path $folder | Out-Null
 foreach ($name in $files) { Copy-Item -LiteralPath (Join-Path $binaryRoot $name) -Destination (Join-Path $folder $name) -Force }

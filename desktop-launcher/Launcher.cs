@@ -64,6 +64,11 @@ namespace MaloTCG
             demo = args.Contains("--demo") || args.Contains("--self-test");
             selfTest = args.Contains("--self-test");
             Title = demo ? "MALO-TCG 桌面启动器 · 演示" : "MALO-TCG 桌面启动器";
+            using (var iconStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("LauncherIcon")) {
+                var icon = BitmapFrame.Create(iconStream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                icon.Freeze();
+                Icon = icon;
+            }
             WindowStyle = WindowStyle.None;
             AllowsTransparency = !systemBackdrop;
             Background = Brushes.Transparent;
