@@ -40,8 +40,6 @@ namespace MaloTCG
         double surface = 0.72;
         bool frosted = true;
         bool blurApplied;
-        int regionWidth, regionHeight;
-        bool roundedRegionApplied;
         bool dark;
         SessionCache sessionCache;
         string restoreScriptId;
@@ -120,13 +118,11 @@ namespace MaloTCG
             Grid.SetRow(floatingDrag, 1);
             Panel.SetZIndex(floatingDrag, 10);
             grid.Children.Add(floatingDrag);
-            // Only the native window region rounds the outer edge. A second alpha-rounded
-            // WPF surface exposes black compositor pixels beneath the blur at all four corners.
+            // Match the rectangular compositor backdrop with a fully tinted rectangular surface.
             shell = new Border { CornerRadius = new CornerRadius(0), Child = grid };
             Content = shell;
             PaintShell();
             SourceInitialized += (s, e) => PaintShell();
-            SizeChanged += (s, e) => UpdateRoundedRegion();
             Loaded += async (s, e) => await Initialize();
             Closed += (s, e) => { closing = true; web.Dispose(); };
             PreviewKeyDown += async (s, e) => {
@@ -283,46 +279,23 @@ namespace MaloTCG
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
-        [DllImport("gdi32.dll")]
-        static extern IntPtr CreateRoundRectRgn(int left, int top, int right, int bottom, int ellipseWidth, int ellipseHeight);
-        [DllImport("gdi32.dll")]
-        static extern bool DeleteObject(IntPtr obj);
         [DllImport("user32.dll")]
         static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, bool redraw);
         [DllImport("user32.dll")]
         static extern int GetWindowRgn(IntPtr hwnd, IntPtr region);
         [DllImport("gdi32.dll")]
-        static extern bool PtInRegion(IntPtr region, int x, int y);
+        static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
+        [DllImport("gdi32.dll")]
+        static extern bool DeleteObject(IntPtr obj);
 
-        void UpdateRoundedRegion()
+        bool NativeSurfaceIsRectangular()
         {
-            var source = PresentationSource.FromVisual(this);
-            var handle = new WindowInteropHelper(this).Handle;
-            if (source == null || handle == IntPtr.Zero || ActualWidth <= 0 || ActualHeight <= 0) return;
-            var scale = source.CompositionTarget.TransformToDevice;
-            int width = (int)Math.Round(ActualWidth * scale.M11);
-            int height = (int)Math.Round(ActualHeight * scale.M22);
-            // Keep every source texel tinted; the HWND region alone clips the corners.
-            shell.Clip = null;
-            if (roundedRegionApplied && regionWidth == width && regionHeight == height) return;
-            var region = CreateRoundRectRgn(0, 0, width + 1, height + 1, (int)Math.Round(20 * scale.M11), (int)Math.Round(20 * scale.M22));
-            if (region == IntPtr.Zero) { roundedRegionApplied = false; return; }
-            // SetWindowRgn transfers ownership on success. Only free failed regions.
-            roundedRegionApplied = SetWindowRgn(handle, region, true) != 0;
-            if (!roundedRegionApplied) DeleteObject(region);
-            regionWidth = width;
-            regionHeight = height;
-        }
-
-        bool NativeCornersAreClipped()
-        {
-            var region = CreateRoundRectRgn(0, 0, 1, 1, 0, 0);
+            var region = CreateRectRgn(0, 0, 0, 0);
             if (region == IntPtr.Zero) return false;
             try {
-                return GetWindowRgn(new WindowInteropHelper(this).Handle, region) != 0
-                    && !PtInRegion(region, 0, 0) && !PtInRegion(region, regionWidth - 1, 0)
-                    && !PtInRegion(region, 0, regionHeight - 1) && !PtInRegion(region, regionWidth - 1, regionHeight - 1)
-                    && PtInRegion(region, regionWidth / 2, regionHeight / 2);
+                // No custom HWND region: compositor and application use the same full rectangle.
+                return GetWindowRgn(new WindowInteropHelper(this).Handle, region) == 0
+                    && shell.CornerRadius == new CornerRadius(0) && shell.Clip == null;
             } finally { DeleteObject(region); }
         }
 
@@ -330,8 +303,10 @@ namespace MaloTCG
         {
             var handle = new WindowInteropHelper(this).Handle;
             if (handle == IntPtr.Zero) return;
-            UpdateRoundedRegion();
-            enabled = enabled && roundedRegionApplied;
+            // Accent blur can ignore rounded HWND regions on layered WPF windows.
+            // Keep both surfaces rectangular rather than exposing dark corner wedges.
+            SetWindowRgn(handle, IntPtr.Zero, true);
+            shell.Clip = null;
             var accent = new AccentPolicy { State = enabled ? 3 : 0, Flags = 0 };
             var memory = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(AccentPolicy)));
             try {
@@ -440,7 +415,7 @@ namespace MaloTCG
                 report["nativeBlurAccepted"] = blurApplied;
                 report["borderlessSurface"] = shell.BorderThickness == new Thickness(0);
                 report["surfaceOpacity"] = surface;
-                report["nativeCornersClipped"] = NativeCornersAreClipped();
+                report["nativeSurfaceRectangular"] = NativeSurfaceIsRectangular();
                 int pixelWidth = (int)ActualWidth, pixelHeight = (int)ActualHeight;
                 report["cornerSourceFilled"] = pixels[3] >= 180 && pixels[(pixelWidth - 1) * 4 + 3] >= 180
                     && pixels[(pixelHeight - 1) * pixelWidth * 4 + 3] >= 180
@@ -468,7 +443,7 @@ namespace MaloTCG
                 var output = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "self-test.json");
                 await SetMode("detail");
                 await Task.Delay(300);
-                report["detailCornersClipped"] = NativeCornersAreClipped();
+                report["detailSurfaceRectangular"] = NativeSurfaceIsRectangular();
                 report["detailWidth"] = Width;
                 report["detailMode"] = await web.CoreWebView2.ExecuteScriptAsync("PtcgDesktop.getMode()");
                 await Task.Delay(16000);
