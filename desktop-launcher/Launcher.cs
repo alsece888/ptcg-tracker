@@ -78,7 +78,7 @@ namespace MaloTCG
             toolbarRow = new RowDefinition { Height = new GridLength(28) };
             grid.RowDefinitions.Add(toolbarRow);
             grid.RowDefinitions.Add(new RowDefinition());
-            toolbar = new Border { Background = new SolidColorBrush(Color.FromArgb(225, 237, 243, 239)), CornerRadius = new CornerRadius(8, 8, 0, 0) };
+            toolbar = new Border { Background = new SolidColorBrush(Color.FromArgb(225, 237, 243, 239)), CornerRadius = new CornerRadius(0) };
             var strip = new DockPanel { LastChildFill = true };
             toolbar.Child = strip;
             var controls = new StackPanel { Orientation = Orientation.Horizontal };
@@ -120,7 +120,9 @@ namespace MaloTCG
             Grid.SetRow(floatingDrag, 1);
             Panel.SetZIndex(floatingDrag, 10);
             grid.Children.Add(floatingDrag);
-            shell = new Border { CornerRadius = new CornerRadius(10), Child = grid };
+            // Only the native window region rounds the outer edge. A second alpha-rounded
+            // WPF surface exposes black compositor pixels beneath the blur at all four corners.
+            shell = new Border { CornerRadius = new CornerRadius(0), Child = grid };
             Content = shell;
             PaintShell();
             SourceInitialized += (s, e) => PaintShell();
@@ -300,7 +302,8 @@ namespace MaloTCG
             var scale = source.CompositionTarget.TransformToDevice;
             int width = (int)Math.Round(ActualWidth * scale.M11);
             int height = (int)Math.Round(ActualHeight * scale.M22);
-            shell.Clip = new RectangleGeometry(new Rect(0, 0, ActualWidth, ActualHeight), 10, 10);
+            // Keep every source texel tinted; the HWND region alone clips the corners.
+            shell.Clip = null;
             if (roundedRegionApplied && regionWidth == width && regionHeight == height) return;
             var region = CreateRoundRectRgn(0, 0, width + 1, height + 1, (int)Math.Round(20 * scale.M11), (int)Math.Round(20 * scale.M22));
             if (region == IntPtr.Zero) { roundedRegionApplied = false; return; }
@@ -438,6 +441,11 @@ namespace MaloTCG
                 report["borderlessSurface"] = shell.BorderThickness == new Thickness(0);
                 report["surfaceOpacity"] = surface;
                 report["nativeCornersClipped"] = NativeCornersAreClipped();
+                int pixelWidth = (int)ActualWidth, pixelHeight = (int)ActualHeight;
+                report["cornerSourceFilled"] = pixels[3] >= 180 && pixels[(pixelWidth - 1) * 4 + 3] >= 180
+                    && pixels[(pixelHeight - 1) * pixelWidth * 4 + 3] >= 180
+                    && pixels[(pixelWidth * pixelHeight - 1) * 4 + 3] >= 180
+                    && shell.CornerRadius == new CornerRadius(0) && shell.Clip == null;
                 report["bodyBackgroundIsTransparent"] = await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.getElementById('ptcg-desktop-panel').contentDocument.querySelector('.quick-record')).backgroundColor==='rgba(0, 0, 0, 0)'");
                 report["compactLayoutGrouped"] = await web.CoreWebView2.ExecuteScriptAsync("(()=>{const w=document.getElementById('ptcg-desktop-panel').contentWindow;const d=w.document;const turn=d.getElementById('qrTurnFirst').getBoundingClientRect();const opp=d.getElementById('qrOpp').getBoundingClientRect();const win=d.querySelector('.qr-btn.win').getBoundingClientRect();const loss=d.querySelector('.qr-btn.loss').getBoundingClientRect();return [turn,opp,win,loss].every(r=>r.left>=0&&r.right<=w.innerWidth&&r.top>=0&&r.bottom<=w.innerHeight)&&turn.bottom<=opp.top+1&&opp.bottom<=win.top+1&&Math.abs(win.top-loss.top)<1;})()");
                 var cachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session-cache-self-test.bin");

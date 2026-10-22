@@ -8,7 +8,7 @@ WPF 无边框透明窗口 + WebView2CompositionControl，复用正式网站的�
 
 普通启动加载 `https://malo-ptcg.cn/?desktop=1`；`--demo` 使用独立演示资料目录；`--self-test` 运行演示记录与窗口切换，并写出 `self-test.json` 和透明 PNG `desktop-preview.png`。演示会重置演示资料，不写普通使用资料，不登录云端。
 
-自测结束后运行 `desktop-launcher/verify-self-test.ps1`，检查十八项桌面验收。运行 `desktop-launcher/package.ps1` 生成 ZIP；打包前会确认报告晚于程序构建，并逐文件核对 ZIP 中的七个发布文件。测试报告、演示数据、截图和开发工具不会打入发布包。
+自测结束后运行 `desktop-launcher/verify-self-test.ps1`，检查十九项桌面验收。运行 `desktop-launcher/package.ps1` 生成 ZIP；打包前会确认报告晚于程序构建，并逐文件核对 ZIP 中的七个发布文件。测试报告、演示数据、截图和开发工具不会打入发布包。
 
 ## 数据与界面
 
@@ -38,3 +38,5 @@ WPF 无边框透明窗口 + WebView2CompositionControl，复用正式网站的�
 0.1.6：无边框、原生背景模糊（系统支持时），默认72%不透明度；⋯菜单可关闭毛玻璃、选择55/72/90/100%不透明度。系统不支持模糊时使用半透明背景；保持150×150及原版配色。截图RenderTargetBitmap仅保存应用图层，不包含系统合成的桌面模糊，效果另经真实窗口截图检查。
 
 0.1.7：原生窗口区域与WPF内容使用相同10px圆角，禁止系统二次圆角；区域随尺寸和DPI更新，裁切失败关闭模糊，避免四角黑边。新增微缩/详细模式四角排除及中心保留检查。
+
+0.1.8：修正0.1.7双层圆角方式。原生窗口区域独自裁圆角；WPF背景完整矩形覆盖、不再另行CornerRadius/Clip裁透明角。增加四个源角像素alpha检查，防止透明底层被模糊合成为深色三角。保留72%不透明度及原配色。
