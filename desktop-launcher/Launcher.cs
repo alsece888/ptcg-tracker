@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows;
@@ -35,7 +37,9 @@ namespace MaloTCG
         bool ready;
         bool closing;
         bool testing;
-        double surface = 0.90;
+        double surface = 0.72;
+        bool frosted = true;
+        bool blurApplied;
         bool dark;
         SessionCache sessionCache;
         string restoreScriptId;
@@ -117,6 +121,7 @@ namespace MaloTCG
             shell = new Border { CornerRadius = new CornerRadius(10), Child = grid };
             Content = shell;
             PaintShell();
+            SourceInitialized += (s, e) => PaintShell();
             Loaded += async (s, e) => await Initialize();
             Closed += (s, e) => { closing = true; web.Dispose(); };
             PreviewKeyDown += async (s, e) => {
@@ -256,10 +261,39 @@ namespace MaloTCG
             floatingMenu.Visibility = home ? Visibility.Collapsed : Visibility.Visible;
             floatingDrag.Visibility = home ? Visibility.Collapsed : Visibility.Visible;
             byte alpha = home ? (byte)255 : (byte)Math.Round(255 * surface);
+            ApplyBackdrop(!home && frosted);
+            shell.BorderThickness = new Thickness(0);
             shell.Background = new SolidColorBrush(dark ? Color.FromArgb(alpha, 23, 32, 41) : Color.FromArgb(alpha, 250, 252, 251));
             foreach (var button in buttons) button.Foreground = dark ? Brushes.WhiteSmoke : Brushes.DarkSlateGray;
             pinButton.Foreground = Topmost ? Brushes.SeaGreen : (dark ? Brushes.LightGray : Brushes.DimGray);
             floatingDrag.Foreground = dark ? Brushes.LightGray : Brushes.DimGray;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct AccentPolicy { public int State, Flags, GradientColor, AnimationId; }
+        [StructLayout(LayoutKind.Sequential)]
+        struct CompositionData { public int Attribute; public IntPtr Data; public int Size; }
+        [DllImport("user32.dll")]
+        static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref CompositionData data);
+        [DllImport("dwmapi.dll")]
+        static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+        void ApplyBackdrop(bool enabled)
+        {
+            var handle = new WindowInteropHelper(this).Handle;
+            if (handle == IntPtr.Zero) return;
+            var accent = new AccentPolicy { State = enabled ? 3 : 0, Flags = 0 };
+            var memory = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(AccentPolicy)));
+            try {
+                Marshal.StructureToPtr(accent, memory, false);
+                var data = new CompositionData { Attribute = 19, Data = memory, Size = Marshal.SizeOf(typeof(AccentPolicy)) };
+                blurApplied = SetWindowCompositionAttribute(handle, ref data) != 0 && enabled;
+                // Windows 11: suppress the compositor's default outline too.
+                int noBorder = unchecked((int)0xFFFFFFFE);
+                DwmSetWindowAttribute(handle, 34, ref noBorder, sizeof(int));
+            } catch (EntryPointNotFoundException) { blurApplied = false; }
+            catch (DllNotFoundException) { blurApplied = false; }
+            finally { Marshal.FreeHGlobal(memory); }
         }
 
         async Task ApplyWebMode()
@@ -286,7 +320,10 @@ namespace MaloTCG
             pinItem.Click += (s, e) => { Topmost = !Topmost; PaintShell(); };
             menu.Items.Add(pinItem);
             menu.Items.Add(new Separator());
-            foreach (var value in new[] { 0.72, 0.90, 1.0 }) {
+            var frostItem = new MenuItem { Header = "毛玻璃背景", IsCheckable = true, IsChecked = frosted };
+            frostItem.Click += (s, e) => { frosted = !frosted; PaintShell(); };
+            menu.Items.Add(frostItem);
+            foreach (var value in new[] { 0.55, 0.72, 0.90, 1.0 }) {
                 var opacity = value;
                 var item = new MenuItem { Header = "面板不透明度 " + (int)(value * 100) + "%", IsCheckable = true, IsChecked = Math.Abs(surface - value) < 0.01 };
                 item.Click += async (s, e) => { surface = opacity; PaintShell(); await ApplyWebMode(); };
@@ -348,6 +385,9 @@ namespace MaloTCG
                 report["panelAlpha"] = pixels[(50 * (int)ActualWidth + 100) * 4 + 3];
                 report["bottomAlpha"] = pixels[((int)ActualHeight - 5) * (int)ActualWidth * 4 + 100 * 4 + 3];
                 report["toolbarHeight"] = toolbarRow.ActualHeight;
+                report["nativeBlurAccepted"] = blurApplied;
+                report["borderlessSurface"] = shell.BorderThickness == new Thickness(0);
+                report["surfaceOpacity"] = surface;
                 report["bodyBackgroundIsTransparent"] = await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.getElementById('ptcg-desktop-panel').contentDocument.querySelector('.quick-record')).backgroundColor==='rgba(0, 0, 0, 0)'");
                 report["compactLayoutGrouped"] = await web.CoreWebView2.ExecuteScriptAsync("(()=>{const w=document.getElementById('ptcg-desktop-panel').contentWindow;const d=w.document;const turn=d.getElementById('qrTurnFirst').getBoundingClientRect();const opp=d.getElementById('qrOpp').getBoundingClientRect();const win=d.querySelector('.qr-btn.win').getBoundingClientRect();const loss=d.querySelector('.qr-btn.loss').getBoundingClientRect();return [turn,opp,win,loss].every(r=>r.left>=0&&r.right<=w.innerWidth&&r.top>=0&&r.bottom<=w.innerHeight)&&turn.bottom<=opp.top+1&&opp.bottom<=win.top+1&&Math.abs(win.top-loss.top)<1;})()");
                 var cachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session-cache-self-test.bin");

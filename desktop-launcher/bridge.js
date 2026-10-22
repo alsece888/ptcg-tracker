@@ -4,7 +4,7 @@
   if (window.top !== window || !window.chrome?.webview) return;
   if (!['/', '/index.html'].includes(location.pathname)) return;
   let mode = 'home';
-  let surface = 0.90;
+  let surface = 0.72;
   let panel;
   const send = (command, extra = {}) => chrome.webview.postMessage({ command, ...extra });
   function stylePanel() {
@@ -33,7 +33,10 @@
       body[data-mode="mini"] .hist-btn-turn { min-width: 0; min-height: 20px; padding: 0; font-size: 11px; font-weight: 600; border: 0; border-radius: 4px; background: var(--bg-card); color: var(--text); }
       body[data-mode="mini"] .hist-btn-turn.active { background: var(--accent); color: #fff; }
       body[data-mode="mini"] .hist-btn-turn.active.second { background: var(--info); color: #fff; }
-      body[data-mode="mini"] .qr-opp { grid-column: 1 / -1; width: 100%; max-width: none; height: 24px; min-height: 24px; font-size: 11px; padding: 2px 6px; border: 1px solid var(--divider); border-radius: 6px; background: var(--bg-input); color: var(--text); }
+      body[data-mode="mini"] .qr-opp { grid-column: 1 / -1; width: 100%; max-width: none; height: 24px; min-height: 24px; font-size: 11px; padding: 2px 6px; border: 0; outline: 0; border-radius: 6px; background: rgba(255,255,255,.34); color: var(--text); }
+      [data-theme="dark"] body[data-mode="mini"] .qr-opp { background: rgba(255,255,255,.09); }
+      body[data-mode="mini"] .hist-btn-turn:not(.active) { background: rgba(255,255,255,.34); }
+      [data-theme="dark"] body[data-mode="mini"] .hist-btn-turn:not(.active) { background: rgba(255,255,255,.09); }
       body[data-mode="mini"] .qr-btn { min-height: 30px; padding: 0; font-size: 13px; font-weight: 700; border-radius: 6px; box-shadow: none; }
       body[data-mode="mini"] .qr-row + .qr-row { margin-top: 0; }
     `;
@@ -72,7 +75,7 @@
   }
   window.PtcgDesktop = Object.freeze({
     setMode,
-    setSurface(value) { surface = Math.min(1, Math.max(0.35, Number(value) || 0.90)); stylePanel(); },
+    setSurface(value) { surface = Math.min(1, Math.max(0.35, Number(value) || 0.72)); stylePanel(); },
     getMode: () => mode,
   });
   document.addEventListener('DOMContentLoaded', () => {
