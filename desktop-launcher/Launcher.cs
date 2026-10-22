@@ -316,6 +316,7 @@ namespace MaloTCG
                     await Task.Delay(500);
                 }
                 if (!panelReady) throw new InvalidOperationException("Online record panel did not finish loading within 30 seconds");
+                await web.CoreWebView2.ExecuteScriptAsync("setTheme('light');syncChannel.postMessage({type:'theme-changed',theme:'light'});");
                 await web.CoreWebView2.ExecuteScriptAsync("window.__desktopSelfTestMarker='same-document';sessionStorage.setItem('ptcg-desktop-self-test','keep-session');");
                 await SetMode("mini");
                 await Task.Delay(700);
@@ -348,6 +349,7 @@ namespace MaloTCG
                 report["bottomAlpha"] = pixels[((int)ActualHeight - 5) * (int)ActualWidth * 4 + 100 * 4 + 3];
                 report["toolbarHeight"] = toolbarRow.ActualHeight;
                 report["bodyBackgroundIsTransparent"] = await web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.getElementById('ptcg-desktop-panel').contentDocument.querySelector('.quick-record')).backgroundColor==='rgba(0, 0, 0, 0)'");
+                report["compactLayoutGrouped"] = await web.CoreWebView2.ExecuteScriptAsync("(()=>{const w=document.getElementById('ptcg-desktop-panel').contentWindow;const d=w.document;const turn=d.getElementById('qrTurnFirst').getBoundingClientRect();const opp=d.getElementById('qrOpp').getBoundingClientRect();const win=d.querySelector('.qr-btn.win').getBoundingClientRect();const loss=d.querySelector('.qr-btn.loss').getBoundingClientRect();return [turn,opp,win,loss].every(r=>r.left>=0&&r.right<=w.innerWidth&&r.top>=0&&r.bottom<=w.innerHeight)&&turn.bottom<=opp.top+1&&opp.bottom<=win.top+1&&Math.abs(win.top-loss.top)<1;})()");
                 var cachePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session-cache-self-test.bin");
                 var cache = new SessionCache(cachePath);
                 string testToken = "desktop-test." + (DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 48 * 60 * 60) + ".test-nonce.test-signature";
@@ -378,6 +380,15 @@ namespace MaloTCG
                 report["homeMode"] = await web.CoreWebView2.ExecuteScriptAsync("PtcgDesktop.getMode()");
                 report["sameDocumentAndSession"] = await web.CoreWebView2.ExecuteScriptAsync("window.__desktopSelfTestMarker==='same-document'&&sessionStorage.getItem('ptcg-desktop-self-test')==='keep-session'");
                 await SetMode("mini");
+                await web.CoreWebView2.ExecuteScriptAsync("setTheme('dark');syncChannel.postMessage({type:'theme-changed',theme:'dark'});");
+                await Task.Delay(500);
+                report["darkThemeRendered"] = dark && await web.CoreWebView2.ExecuteScriptAsync("document.getElementById('ptcg-desktop-panel').contentDocument.documentElement.dataset.theme") == "\"dark\"";
+                var darkImage = new RenderTargetBitmap((int)ActualWidth, (int)ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                darkImage.Render(this);
+                var darkEncoder = new PngBitmapEncoder();
+                darkEncoder.Frames.Add(BitmapFrame.Create(darkImage));
+                using (var file = File.Create(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "desktop-preview-dark.png"))) darkEncoder.Save(file);
+                await web.CoreWebView2.ExecuteScriptAsync("setTheme('light');syncChannel.postMessage({type:'theme-changed',theme:'light'});");
                 File.WriteAllText(output, json.Serialize(report));
             } catch (Exception ex) { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "self-test-error.txt"), ex.ToString()); }
         }

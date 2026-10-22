@@ -8,7 +8,7 @@ WPF 无边框透明窗口 + WebView2CompositionControl，复用正式网站的�
 
 普通启动加载 `https://malo-ptcg.cn/?desktop=1`；`--demo` 使用独立演示资料目录；`--self-test` 运行演示记录与窗口切换，并写出 `self-test.json` 和透明 PNG `desktop-preview.png`。演示会重置演示资料，不写普通使用资料，不登录云端。
 
-自测结束后运行 `desktop-launcher/verify-self-test.ps1`，检查十四项桌面验收。运行 `desktop-launcher/package.ps1` 生成 ZIP；打包前会确认报告晚于程序构建，并逐文件核对 ZIP 中的七个发布文件。测试报告、演示数据、截图和开发工具不会打入发布包。
+自测结束后运行 `desktop-launcher/verify-self-test.ps1`，检查十六项桌面验收。运行 `desktop-launcher/package.ps1` 生成 ZIP；打包前会确认报告晚于程序构建，并逐文件核对 ZIP 中的七个发布文件。测试报告、演示数据、截图和开发工具不会打入发布包。
 
 ## 数据与界面
 
@@ -30,3 +30,5 @@ WPF 无边框透明窗口 + WebView2CompositionControl，复用正式网站的�
 0.1.2：微缩窗180×180，新增SessionCache.cs负责加密保存和恢复，服务端12小时有效期未改变。自测使用隔离的模拟凭证，验证新实例读取、磁盘非明文、退出清除、过期拒绝和损坏恢复，不请求云端。
 
 0.1.3：微缩窗150×150，服务端签发会话延长至48小时，本地加密缓存同样接受48小时。旧凭证不会自动续期，升级后需重新登录一次。Worker新增公开auth/config元数据用于确认已部署会话有效期。
+
+0.1.4：保持150×150，顶部卡组与胜率、中间分段先后手、独立对手选择、底部等宽胜负。统一间距和圆角、降低按钮饱和度，补充控件不重叠及深色主题截图检查。

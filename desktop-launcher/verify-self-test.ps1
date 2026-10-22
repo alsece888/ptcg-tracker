@@ -15,6 +15,8 @@ $checks = [ordered]@{
     'Logout clears remembered session' = ($report.logoutClearsRememberedSession -eq $true)
     'Expired remembered session is rejected' = ($report.expiredSessionRejected -eq $true)
     'Corrupt remembered session is rejected' = ($report.corruptSessionRejected -eq $true)
+    'Compact controls are grouped in separate rows without overflow' = ($report.compactLayoutGrouped -eq 'true')
+    'Dark theme matches the native background' = ($report.darkThemeRendered -eq $true)
 }
 foreach ($check in $checks.GetEnumerator()) {
     Write-Output "$(if ($check.Value) { 'PASS' } else { 'FAIL' }): $($check.Key)"
